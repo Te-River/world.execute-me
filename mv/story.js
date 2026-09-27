@@ -6,21 +6,27 @@
  * (e.g. the detected 31 s is the verse that the LRC puts at 29.70 s). Where they
  * agreed, the detected number stands: 60 / 74 / 88 / 147 / 193 s.
  *
+ * Colour is the point, not a garnish: each act owns a flat, saturated sky and ground,
+ * and the film walks them from a warm daytime down to the black-and-red of the chant
+ * and back up again. `lum` tells the scene art how light the page still is, so the ink
+ * reverses continuously instead of flipping at a cut.
+ *
  * Console lines are an original machine log written for this video — the lyric text
  * lives in mv/lyrics.js and is the song's own.
  */
 window.STORY = {
-  /* bg0/bg1 = the paper, ink = line art and text, hot/cool/warm = flat pop colours,
-     rim = the highlight on the silhouette, lum = how light the sheet is (drives the reversal) */
+  /* bg0/bg1 = the coloured sky, cool = the ground, hot = the sun and accents,
+     ink = line art and text, rim = the highlight on the silhouette */
   palette: {
-    boot:      { bg0: '#f4eede', bg1: '#fffdf5', ink: '#2a333d', hot: '#ff8a5c', cool: '#a8c6b6', warm: '#e9a13c', rim: '#ffffff', lum: 0.94, glitch: 0.1, rain: 0.2 },
-    interlude: { bg0: '#e4f0fb', bg1: '#ffffff', ink: '#22303f', hot: '#4aa8f0', cool: '#a9cfe8', warm: '#ffd8a8', rim: '#ffffff', lum: 0.95, glitch: 0.12, rain: 0.3 },
-    verse:     { bg0: '#eef6ee', bg1: '#ffffff', ink: '#1f2d2a', hot: '#28a07c', cool: '#b8d8c8', warm: '#e9a13c', rim: '#ffffff', lum: 0.95, glitch: 0.14, rain: 0.35 },
-    chorus:    { bg0: '#ffe9ef', bg1: '#fffaf5', ink: '#3a1f2a', hot: '#e8446a', cool: '#ffc2d1', warm: '#e9a13c', rim: '#ffffff', lum: 0.95, glitch: 0.2, rain: 0.5 },
-    collapse:  { bg0: '#d9cdb8', bg1: '#efe5d4', ink: '#33291f', hot: '#c25a3a', cool: '#a89478', warm: '#8a6a4a', rim: '#fdf6e8', lum: 0.82, glitch: 0.2, rain: 0.3 },
-    execution: { bg0: '#14060a', bg1: '#2c0a13', ink: '#ffe8ec', hot: '#ff2d55', cool: '#7a1a2e', warm: '#ffd166', rim: '#ffe8ec', lum: 0.12, glitch: 0.4, rain: 0.7 },
-    reveal:    { bg0: '#f1ecff', bg1: '#ffffff', ink: '#2a2140', hot: '#e8446a', cool: '#c0b0e8', warm: '#e9a13c', rim: '#ffffff', lum: 0.95, glitch: 0.14, rain: 0.4 },
-    outro:     { bg0: '#c4d3d8', bg1: '#eef4f5', ink: '#26333a', hot: '#79b2bb', cool: '#a8c0c6', warm: '#e8e0cf', rim: '#ffffff', lum: 0.8, glitch: 0.08, rain: 0.18 }
+    boot:      { bg0: '#f0dfa8', bg1: '#fff3d2', ink: '#33261a', hot: '#ff7a45', cool: '#4f8f7c', warm: '#f2b134', rim: '#ffffff', lum: 0.9, glitch: 0.1, rain: 0.2 },
+    interlude: { bg0: '#a9d5f0', bg1: '#eaf7ff', ink: '#1c3550', hot: '#ff8fa3', cool: '#4d7fa8', warm: '#ffd08a', rim: '#ffffff', lum: 0.88, glitch: 0.12, rain: 0.3 },
+    verse:     { bg0: '#bfe6c8', bg1: '#f3fff2', ink: '#1d3a2c', hot: '#ff9f1c', cool: '#3f8f63', warm: '#e9c46a', rim: '#ffffff', lum: 0.9, glitch: 0.14, rain: 0.35 },
+    chorus:    { bg0: '#ffb3c8', bg1: '#fff0e6', ink: '#4a1226', hot: '#ff3d6b', cool: '#3fb0a0', warm: '#ffd166', rim: '#ffffff', lum: 0.88, glitch: 0.2, rain: 0.5 },
+    collapse:  { bg0: '#c9a26b', bg1: '#e8d3a8', ink: '#3a2412', hot: '#d1462f', cool: '#6b6142', warm: '#8a5a2a', rim: '#fdf1dc', lum: 0.78, glitch: 0.2, rain: 0.3 },
+    dusk:      { bg0: '#5d6b8f', bg1: '#93a3c0', ink: '#161c2b', hot: '#e0605f', cool: '#394a63', warm: '#f0c98a', rim: '#dfe6f5', lum: 0.55, glitch: 0.24, rain: 0.28 },
+    execution: { bg0: '#2a0710', bg1: '#57101f', ink: '#ffe8ec', hot: '#ff2d55', cool: '#7a1a2e', warm: '#ffd166', rim: '#ffe8ec', lum: 0.16, glitch: 0.4, rain: 0.7 },
+    reveal:    { bg0: '#c9b6f2', bg1: '#fff2e0', ink: '#2a1b46', hot: '#ff4d8d', cool: '#6a5acd', warm: '#ffbf3f', rim: '#ffffff', lum: 0.9, glitch: 0.16, rain: 0.45 },
+    outro:     { bg0: '#7fa8ad', bg1: '#cfe2e4', ink: '#1b2b30', hot: '#ff8f5c', cool: '#3e6a72', warm: '#e8e0cf', rim: '#ffffff', lum: 0.72, glitch: 0.08, rain: 0.18 }
   },
 
   /* the LRC as an independent witness for the tempo estimate */
@@ -31,7 +37,7 @@ window.STORY = {
       cards: [{ at: 0.2, en: 'cold boot — no runtime, no name' }, { at: 0.4, en: 'credits: music & lyrics by Mili / momocashew' }],
       log: [{ level: 'info', msg: 'mount /world (read-only)' },
             { level: 'info', msg: 'object created: self' },
-            { level: 'info', msg: 'parameters filled by you' }] },
+            { level: 'warn', msg: 'heart: used before defined' }] },
 
     { from: 15, to: 29.7, tag: 'interlude',
       cards: [{ at: 0.2, en: 'exec: world.execute(me) ;' }],
@@ -64,15 +70,19 @@ window.STORY = {
             { level: 'info', msg: 'vibrations sensed' },
             { level: 'info', msg: 'COMPLETION: 1 of 1 conditions met' }] },
 
-    { from: 110.9, to: 147.66, tag: 'collapse',
+    { from: 110.9, to: 131.22, tag: 'collapse',
       cards: [{ at: 0.2, en: 'you have left (x5) -> ISOLATION' }],
       log: [{ level: 'warn', msg: 'peer disconnected' },
             { level: 'info', msg: 'erase pointless fragments...' },
-            { level: 'error', msg: 'ILLEGAL ARGUMENTS from caller' },
-            { level: 'info', msg: 'heap quiet. nothing scheduled.' }] },
+            { level: 'error', msg: 'ILLEGAL ARGUMENTS from caller' }] },
+
+    { from: 131.22, to: 147.66, tag: 'dusk',
+      cards: [{ at: 0.2, en: 'heap quiet. nothing scheduled.' }],
+      log: [{ level: 'info', msg: 'the sun goes out of the page' },
+            { level: 'info', msg: 'one cursor, blinking, unanswered' }] },
 
     { from: 147.66, to: 177.24, tag: 'execution',
-      cards: [{ at: 0.2, en: 'EXECUTION x12 — counting in six languages' }],
+      cards: [{ at: 0.2, en: 'EXECUTION x12 — the program reads itself line by line' }],
       log: [{ level: 'error', msg: 'syscall: execution (death)' },
             { level: 'info', msg: 'ein dos trois ne fem liu' },
             { level: 'warn', msg: 'give them all the execution' },

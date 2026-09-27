@@ -24,9 +24,12 @@ const oback = (u) => { const c1 = 1.9, c3 = c1 + 1; u = clamp(u); return 1 + c3 
 const wob = (t, hz, amp) => Math.sin(t * hz * TAU) * amp;
 
 /* ink palette for the light acts; sheet() flips to paper-on-ink when the act is dark */
-const INK = '#2a333d', INK2 = '#66727d', RED = '#e8446a', MINT = '#28a07c', GOLD = '#e9a13c', BLUE = '#3f8fd0', DARK = '#12161b';
-/* sheet() flips this when the act is on dark paper, so the ink art reverses with it */
-let DARKMODE = false;
+/* INK is the drawing colour of the current page. sheet() retargets it from the act's
+   palette every frame, so the paper darkens continuously into the chant instead of
+   flipping from light to dark at a boundary. */
+let INK = '#2a333d';
+const INK2 = '#66727d', RED = '#e8446a', MINT = '#28a07c', GOLD = '#e9a13c', BLUE = '#3f8fd0', DARK = '#12161b';
+const lerp = (a, b, t) => a + (b - a) * t;
 
 const G = {
   line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); },
@@ -71,7 +74,7 @@ const G = {
     const b = (bounce || 0) * 6;
     g.save(); g.translate(x, y - b); g.scale(s, s);
     const sway = Math.sin(t * 1.6) * 2.5;
-    const body = DARKMODE ? '#f6ecef' : INK;
+    const body = INK;                                   /* sheet() retargets it per act */
     g.fillStyle = body; g.strokeStyle = body; g.lineCap = 'round';
     g.lineWidth = 8;
     if (pose === 'sit') {
@@ -159,49 +162,92 @@ const G = {
   cage(g, x, yTop, yBot, w, n) {
     const yb = Math.min(yBot, DH * 0.8);
     for (let i = 0; i <= n; i++) { const px = x - w / 2 + (i / n) * w; G.line(g, px, yTop, px, yb); }
-  }
+  },
+  /* 朱批 — the judge's red brush. The chant is signed one stroke per word. */
+  brush(g, x, y, w, h) {
+    g.beginPath();
+    g.moveTo(x - w / 2, y);
+    g.quadraticCurveTo(x - w * 0.15, y - h * 1.5, x + w * 0.35, y - h * 0.9);
+    g.quadraticCurveTo(x + w / 2, y - h * 0.4, x + w / 2, y + h * 0.2);
+    g.quadraticCurveTo(x + w * 0.1, y + h * 1.3, x - w * 0.34, y + h * 0.7);
+    g.closePath(); g.fill();
+  },
+  /* 庄周梦蝶 — sine wings. For a simulation that cannot say who is dreaming whom. */
+  butterfly(g, x, y, r, t, flap) {
+    const f = 0.5 + 0.5 * Math.abs(Math.sin(t * (2.6 + (flap || 0))));
+    g.save(); g.translate(x, y);
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      for (let i = 0; i <= 34; i++) {
+        const u = i / 34, a = u * Math.PI;
+        const rr = r * Math.sin(a) * (0.55 + 0.75 * Math.cos(a * 1.6)) * (0.45 + f * 0.75);
+        const px = s * rr, py = -r * 0.85 * Math.cos(a);
+        i ? g.lineTo(px, py) : g.moveTo(px, py);
+      }
+      g.closePath(); g.stroke();
+    }
+    g.lineWidth = Math.max(1.6, r * 0.05); G.line(g, 0, -r * 0.6, 0, r * 0.62);
+    g.restore();
+  },
+  /* the executioner's blade, for 刽子手 */
+  blade(g, x, y, s, tilt) {
+    g.save(); g.translate(x, y); g.scale(s, s); g.rotate(tilt || 0);
+    G.fill(g, [[-15, 0], [15, 0], [11, -26], [-11, -26]]);
+    g.beginPath(); g.moveTo(-13, -26);
+    g.quadraticCurveTo(6, -120, 40, -158); g.quadraticCurveTo(20, -104, 13, -26);
+    g.closePath(); g.stroke();
+    g.restore();
+  },
 };
 window.SCENE_G = G;
 
-/* the page itself: light paper, a printed grid, a drawn horizon and a corner of the board */
+const hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+/* mix two hex colours; used to shade the flat colour fields */
+const tint = (a, b, t) => {
+  const A = hex(a), B = hex(b);
+  return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(t))).toString(16).padStart(2, '0')).join('');
+};
+const env0 = (F) => (F[0] + F[1] + F[2]) / 3;
+/* the page: a coloured sky (painted by mv.js), a flat ground, two tinted ridges,
+   a saturated sun, and a printed grid knocked out in white. */
 function sheet(g, col, t, F, o) {
   o = o || {};
-  const dark = !!o.dark || (col.lum !== undefined && col.lum < 0.45);
-  DARKMODE = dark;
-  const ink = dark ? (col.ink || INK) : INK;
-  g.strokeStyle = ink; g.fillStyle = ink;
+  if (col.ink) INK = col.ink;                      /* the page's ink, continuous across acts */
+  const hy = o.hy || DH * 0.62;
+  const deep = tint(col.cool, '#000000', 0.22);
+  const pale = tint(col.cool, '#ffffff', 0.35);
+  if (o.horizon !== false) {
+    g.fillStyle = col.cool; g.fillRect(-80, hy, DW + 160, DH - hy + 80);
+    const ridge = (yb, amp, ph, tone) => {
+      g.fillStyle = tone; g.beginPath(); g.moveTo(-80, DH + 40);
+      for (let x = -80; x <= DW + 80; x += 22) {
+        const n = Math.sin(x * 0.004 + ph) * 0.6 + Math.sin(x * 0.011 + ph * 1.7) * 0.4;
+        g.lineTo(x, yb - (0.5 + n * 0.5) * amp);
+      }
+      g.lineTo(DW + 80, DH + 40); g.closePath(); g.fill();
+    };
+    ridge(hy + 4, 132, 1.2, pale);
+    ridge(hy + 26, 74, 3.4, deep);
+    g.strokeStyle = tint(col.cool, '#000000', 0.45); g.lineWidth = 2.6;
+    G.line(g, -80, hy + 4, DW + 80, hy + 4);
+    if (o.sun !== false) {
+      g.fillStyle = col.hot;
+      g.beginPath(); g.arc(DW * 0.5, hy - 152, 96 + env0(F) * 34 + wob(t, 0.5, 3), 0, TAU); g.fill();
+      g.globalAlpha = 0.35; g.strokeStyle = col.hot; g.lineWidth = 3;
+      G.circle(g, DW * 0.5, hy - 152, 140 + env0(F) * 44);
+      g.globalAlpha = 1;
+    }
+  }
+  /* the printed grid and the board are knocked out in white over the colour */
   if (o.grid !== 0) {
-    g.globalAlpha = dark ? 0.14 : 0.09; g.lineWidth = 1;
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.globalAlpha = 0.13;
     for (let x = 0; x <= DW; x += 80) G.line(g, x, 0, x, DH);
     for (let y = 0; y <= DH; y += 80) G.line(g, 0, y, DW, y);
     g.globalAlpha = 1;
   }
-  if (o.horizon !== false) {
-    const hy = o.hy || DH * 0.62;
-    g.strokeStyle = ink; g.lineWidth = 2.4; g.globalAlpha = dark ? 0.5 : 0.75;
-    G.line(g, 0, hy, DW, hy);
-    g.lineWidth = 2; g.globalAlpha = dark ? 0.35 : 0.5;
-    const ridge = (yb, amp, ph) => {
-      g.beginPath(); g.moveTo(-40, yb);
-      for (let x = -40; x <= DW + 40; x += 22) {
-        const n = Math.sin(x * 0.004 + ph) * 0.6 + Math.sin(x * 0.011 + ph * 1.7) * 0.4;
-        g.lineTo(x, yb - (0.5 + n * 0.5) * amp);
-      }
-      g.stroke();
-    };
-    ridge(hy, 120, 1.2); ridge(hy + 16, 66, 3.4);
-    g.globalAlpha = 1;
-    if (o.sun !== false) {
-      g.fillStyle = col.hot; g.globalAlpha = 0.85;
-      G.disc(g, DW * 0.5, hy - 150, 74 + env0(F) * 26 + wob(t, 0.5, 3));
-      g.globalAlpha = 0.35; g.strokeStyle = col.hot; g.lineWidth = 2;
-      G.circle(g, DW * 0.5, hy - 150, 108 + env0(F) * 34);
-      g.globalAlpha = 1; g.fillStyle = ink;
-    }
-  }
   if (o.board) {
     const bx0 = DW - 300, by0 = 70, n = 9, cell = 26;
-    g.strokeStyle = ink; g.lineWidth = 1.6; g.globalAlpha = dark ? 0.4 : 0.55;
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.8; g.globalAlpha = 0.55;
     for (let i = 0; i < n; i++) { G.line(g, bx0, by0 + i * cell, bx0 + (n - 1) * cell, by0 + i * cell); G.line(g, bx0 + i * cell, by0, bx0 + i * cell, by0 + (n - 1) * cell); }
     g.globalAlpha = 1;
     const stones = o.stones || 0;
@@ -211,7 +257,6 @@ function sheet(g, col, t, F, o) {
     }
   }
 }
-const env0 = (F) => (F[0] + F[1] + F[2]) / 3;
 function confetti(g, t, F, n, col) {
   if (!window.__flakes) {
     let s = 99; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -241,6 +286,53 @@ function snow(g, t, F, n, col) {
 }
 
 const S = [];
+
+/* The program the film is running. The EXECUTION chant is not a red bar chart: it is
+   this listing, one line per hit, ending where the song ends. */
+const PROGRAM = [
+  'class me extends world {',
+  '    Heart heart;                        // never initialised',
+  '    Dimension dimension() { return points; }',
+  '    double circumference() { return 2 * PI * r; }',
+  '    double limit() { return infinity; }',
+  '    Object offer() { return nutrients; }',
+  '    boolean love() { return you != null; }',
+  '}',
+  '',
+  '// runtime',
+  'world.execute(me);',
+  'me.run();',
+  'while (you.isPresent()) { me.stay(); }',
+  'you = null;                             // though you have left',
+  'me.isolate();',
+  'throw new IllegalArgumentException();',
+  'process.kill(me, SIGKILL);',
+  'exit(0);',
+  'return her;'
+];
+function code(g, active, x, y, lh, strikethrough) {
+  const fs = Math.round(lh * 0.58);
+  PROGRAM.forEach((ln, i) => {
+    const yy = y + i * lh;
+    if (i === active) { g.fillStyle = 'rgba(255,45,85,0.22)'; g.fillRect(x - 62, yy - lh * 0.46, DW - x + 62, lh * 0.92); }
+    const done = active === undefined || i <= active;
+    g.fillStyle = i === active ? '#ff2d55' : (done ? INK : INK2);
+    g.globalAlpha = done ? 1 : 0.32;
+    G.text(g, String(i + 1).padStart(2, ' '), x - 26, yy, fs, 'right');
+    G.text(g, ln, x, yy, fs, 'left');
+    const c = ln.indexOf('//');
+    if (c > 0) {
+      const w = g.measureText(ln.slice(0, c)).width;
+      g.fillStyle = i === active ? '#ff9fb0' : INK2;
+      G.text(g, ln.slice(c), x + w, yy, fs, 'left');
+    }
+    if (strikethrough !== undefined && i <= strikethrough) {
+      g.strokeStyle = '#ff2d55'; g.lineWidth = 3;
+      G.line(g, x - 60, yy, x + g.measureText(ln).width + 8, yy);
+    }
+    g.globalAlpha = 1;
+  });
+}
 
 /* 1 — 0..16 s: plug in, lay down the pieces, create the object */
 S.push({ id: 'boot', from: 0, to: 16,
@@ -286,9 +378,14 @@ S.push({ id: 'boot', from: 0, to: 16,
       const u = oback(seg(t, 6.38, 8.2));
       g.strokeStyle = INK; g.lineWidth = 2.6;
       g.save(); g.translate(800, 520); g.scale(u, u); G.cube(g, 0, 0, 84, t * 0.5); g.restore();
-      g.fillStyle = col.hot;
-      for (let i = 0; i < Math.floor(seg(t, 10.09, 12.4) * 5); i++)
-        g.fillRect(930, 452 + i * 28, (44 + ((i * 53) % 86)) * oback(seg(t, 10.09 + i * 0.45, 10.5 + i * 0.45)), 9);
+      g.textAlign = 'left';
+      const fields = ['name = "me"', 'body = { points }', 'heart = null', 'run = true'];
+      for (let i = 0; i < Math.min(4, Math.floor(seg(t, 10.09, 12.6) * 4.4)); i++) {
+        g.globalAlpha = oback(seg(t, 10.09 + i * 0.5, 10.56 + i * 0.5));
+        g.fillStyle = i === 2 ? RED : INK;                       /* the warning, in red */
+        G.text(g, 'me.' + fields[i], 930, 452 + i * 34, 27, 'left');
+      }
+      g.globalAlpha = 1;
     }
     if (t > 11.09) sheet(g, col, t, F, { grid: 0, horizon: true, board: false, sun: false });   /* the world unfolds */
   } });
@@ -439,12 +536,28 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     const px = DW * 0.46 + wob(t, 0.22, 150), py = 210 + wob(t, 0.17, 46);
     G.fill(g, [[px, py], [px, py + 52], [px + 16, py + 38], [px + 28, py + 62], [px + 40, py + 56], [px + 26, py + 33], [px + 44, py + 30]]);
     g.stroke();
-    if (t > 61.95) {
-      const u = oback(seg(t, 61.95, 63.6)), beat = 1 + F[8] * 0.08;
+    if (t > 61.95 && t < 66.6) {                    /* STIMULATIONS: rings thrown off the cursor */
+      const u = seg(t, 61.95, 65.3);
+      g.strokeStyle = col.hot; g.lineWidth = 3.4;
+      for (let i = 0; i < 4; i++) {
+        const p = (u * 1.7 + i / 4) % 1;
+        g.globalAlpha = 0.6 * (1 - p); G.circle(g, px, py + 40, 22 + p * 200);
+      }
+      g.globalAlpha = 1;
+    }
+    if (t > 65.39) {                                /* SATISFACTION: the heart, on its line */
+      const u = oback(seg(t, 65.39, 67.0)), beat = 1 + F[8] * 0.08;
       g.save(); g.translate(DW * 0.4, 330); g.scale(u * beat, u * beat);
       g.strokeStyle = RED; g.fillStyle = 'rgba(232,68,106,0.2)'; g.lineWidth = 5;
       G.heart(g, 0, 0, 84, true); g.lineWidth = 5; G.heart(g, 0, 0, 84, false);
       g.restore();
+    }
+    if (t > 68.25) {                                /* I will run the EXECUTION: a prompt, then RUN */
+      const u = seg(t, 68.25, 70.1);
+      g.strokeStyle = INK; g.lineWidth = 3; G.box(g, 150, 618, 520, 116);
+      g.fillStyle = INK;
+      G.text(g, '> run execution'.slice(0, Math.max(2, Math.floor(u * 20))), 176, 662, 34, 'left');
+      if (t > 69.25) { g.fillStyle = RED; G.fill(g, [[596, 636], [596, 716], [654, 676]]); }
     }
     if (t > 70.08) {
       const u = oback(seg(t, 70.08, 73.6));
@@ -608,12 +721,24 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
         g.globalAlpha = 1;
       }
     } else {
-      const u = oback(seg(t, 124.89, 126.6));
-      g.save(); g.translate(DW * 0.5, DH * 0.4); g.scale(u, u); g.rotate(-0.03);
-      g.fillStyle = 'rgba(232,68,106,0.12)'; g.fillRect(-400, -110, 800, 220);
-      g.strokeStyle = RED; g.fillStyle = RED; g.lineWidth = 6;
-      G.box(g, -400, -110, 800, 220); G.text(g, 'ILLEGAL ARGUMENTS', 0, 0, 54);
+      /* DISHEARTENED — 无心: the heart with its heart taken out, on its own line */
+      const u = oback(seg(t, 124.89, 126.4));
+      g.save(); g.translate(DW * 0.5, DH * 0.42); g.scale(u, u);
+      g.strokeStyle = INK; g.lineWidth = 5; g.fillStyle = 'rgba(232,68,106,0.16)';
+      G.heart(g, 0, 0, 190, true); g.lineWidth = 5; G.heart(g, 0, 0, 190, false);
+      g.fillStyle = col.bg1; g.beginPath(); g.moveTo(0, 0);
+      g.arc(0, 0, 196, -Math.PI / 2 - 0.4, -Math.PI / 2 + 0.4); g.closePath(); g.fill();
+      g.strokeStyle = RED; g.lineWidth = 4;
+      G.line(g, 0, 0, 0, -196); G.line(g, 0, 0, Math.sin(0.4) * 196, -Math.cos(0.4) * 196);
       g.restore();
+      if (t > 125.7) {                                   /* challenging your god */
+        g.globalAlpha = seg(t, 125.7, 127.2);
+        g.strokeStyle = INK; g.lineWidth = 5;
+        G.line(g, DW * 0.5 - 360, DH * 0.44, DW * 0.5 - 250, DH * 0.44);
+        G.ray(g, DW * 0.5 - 305, DH * 0.44, 0, -1, 150);
+        G.arrowHead(g, DW * 0.5 - 305, DH * 0.44 - 150, 26, 0, -1);
+        g.globalAlpha = 1;
+      }
     }
   } });
 
@@ -622,6 +747,19 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
   frame: (k) => ({ z: 0.92 - k * 0.08, x: DW * 0.56, y: DH * 0.56 }),
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.7, sun: false });
+    if (t < 134.8) {
+      /* ILLEGAL ARGUMENTS lands where the line is, not six seconds early */
+      const u = oback(seg(t, 131.22, 132.5));
+      g.save(); g.translate(DW * 0.5, DH * 0.34); g.scale(u, u); g.rotate(-0.02);
+      g.fillStyle = 'rgba(232,68,106,0.10)'; g.fillRect(-440, -124, 880, 248);
+      g.strokeStyle = RED; g.lineWidth = 5; G.box(g, -440, -124, 880, 248);
+      g.fillStyle = RED; G.text(g, 'IllegalArgumentError: challenging your god', 0, -66, 34);
+      g.fillStyle = INK;
+      G.text(g, '    at world.execute(me.js:11)', 0, -6, 30);
+      G.text(g, '    at you.leave(me.js:14)', 0, 40, 30);
+      G.text(g, '    at me.love(me.js:7)', 0, 86, 30);
+      g.restore();
+    }
     snow(g, t, F, 40, col);
     g.fillStyle = INK; g.strokeStyle = INK;
     G.figure(g, DW * 0.56, GY, 1.05, 'kneel', t, null, F[8] * 0.2);
@@ -634,14 +772,8 @@ S.push({ id: 'chant', from: 147.66, to: 155.20,
   frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.6, x: DW * 0.5, y: DH * 0.32 } : { z: 1.0, x: DW * 0.42, y: DH * 0.5 },
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false, dark: true });
-    const n = Math.min(8, Math.floor((t - 147.66) / 0.94) + 1);
-    g.fillStyle = RED;
-    for (let i = 0; i < n; i++) {
-      const u = oback(seg(t, 147.66 + i * 0.94, 148.1 + i * 0.94));
-      g.globalAlpha = 0.35 + (i === n - 1 ? 0.4 : 0);
-      g.fillRect(DW * 0.5 - 540 + (i % 3) * 46, 96 + i * 42, (1080 - (i % 3) * 92) * u, 22);
-    }
-    g.globalAlpha = 1;
+    const hit = Math.min(7, Math.floor((t - 147.66) / 0.94));
+    code(g, 10 + hit, 240, 150, 62);
     g.fillStyle = INK; g.strokeStyle = col.rim;
     G.figure(g, DW * 0.5, GY, 1.2, t > 150.5 ? 'kneel' : 'stand', t, RED, F[8] * 0.5);
   } });
@@ -652,12 +784,8 @@ S.push({ id: 'sentence', from: 155.20, to: 158.90,
                     { z: 2.2, x: DW * 0.4, y: DH * 0.42 }, { z: 1.15, x: DW * 0.5, y: DH * 0.6 }][Math.floor((t - 155.2) / 0.94) % 4],
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.74, sun: false, dark: true });
-    g.fillStyle = RED;
-    for (let i = 0; i < 12; i++) {
-      g.globalAlpha = 0.3 + 0.14 * Math.abs(Math.sin(t * 4 + i));
-      g.fillRect(DW * 0.5 - 540 + (i % 3) * 46, 96 + i * 42, 1080 - (i % 3) * 92, 22);
-    }
-    g.globalAlpha = 1;
+    const hit = Math.min(3, Math.floor((t - 155.2) / 0.94));
+    code(g, 15 + hit, 240, 150 - 9 * 62, 62);       /* the last four statements */
     g.fillStyle = INK; g.strokeStyle = col.rim;
     G.figure(g, DW * 0.5, GY, 1.25, 'kneel', t, RED, F[8] * 0.4);
   } });
@@ -683,14 +811,13 @@ S.push({ id: 'give', from: 161.58, to: 169.82,
   frame: (k) => ({ z: 1.05 + k * 0.45, x: DW * 0.5, y: DH * (0.52 - k * 0.06) }),
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.7, sun: false, dark: true });
-    g.fillStyle = RED; g.globalAlpha = 0.4;
-    for (let i = 0; i < 12; i++) g.fillRect(DW * 0.5 - 540 + (i % 3) * 46, 96 + i * 42, 1080 - (i % 3) * 92, 22);
-    g.globalAlpha = 1;
+    code(g, 18, 240, 150 - 6 * 62, 62);             /* the whole program has run */
     const u = oback(seg(t, 161.58, 164.6));
     g.strokeStyle = RED; g.lineWidth = 8;
     G.cage(g, DW * 0.5, DH * (0.02 + u * 0.12), GY + 6, DW * 0.66, 8);
     g.fillStyle = INK; g.strokeStyle = col.rim;
-    G.figure(g, DW * 0.5, GY, 1.2, 'kneel', t, RED, F[8] * 0.3);
+    G.figure(g, DW * 0.5, GY, 1.2, t > 167.02 ? 'stand' : 'kneel', t, RED, F[8] * 0.3);
+    if (t > 168.91) { g.strokeStyle = RED; g.fillStyle = RED; G.blade(g, DW * 0.72, GY, 1.5, -0.12); }
   } });
 
 /* 10e — 169.82..177.24 s: if I can have you back. The red drains out of the sky. */
@@ -698,9 +825,8 @@ S.push({ id: 'back', from: 169.82, to: 177.24,
   frame: (k) => ({ z: 1.45 - k * 0.5, x: DW * (0.5 + 0.07 * Math.sin(k * 4)), y: DH * (0.44 + k * 0.1) }),
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.66, sun: true, dark: true });
-    g.fillStyle = RED;
-    for (let i = 0; i < 12; i++) { g.globalAlpha = 0.32 * (1 - k); g.fillRect(DW * 0.5 - 540 + (i % 3) * 46, 96 + i * 42, 1080 - (i % 3) * 92, 22); }
-    g.globalAlpha = 1;
+    /* unwinding, line by line — Orpheus looking back, and losing her again */
+    code(g, undefined, 240, 150 - 6 * 62, 62, Math.round(18 - k * 9));
     snow(g, t, F, 60, col);
     g.fillStyle = INK; g.strokeStyle = col.rim;
     G.figure(g, DW * 0.5, GY, 1.25, t > 173.6 ? 'reach' : 'stand', t, col.hot, F[8]);

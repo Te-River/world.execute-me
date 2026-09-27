@@ -195,13 +195,34 @@ function drawSky(t) {
   bx.globalAlpha = 1;
 }
 
-function renderScene(g, idx, t) {
+/* One camera for the whole film. Each scene proposes a framing; at a cut the camera
+   holds the outgoing shot's last framing and settles into the incoming one over SETTLE
+   seconds. Blending on both sides of the cut (an earlier mistake) made the camera snap
+   back at the boundary, which is exactly the "不流畅衔接" the joins showed. */
+const SETTLE = 0.8;
+function cameraAt(t) {
+  const i = SCENES.findIndex(s => t >= s.from && t < s.to);
+  const cur = SCENES[i < 0 ? SCENES.length - 1 : i];
+  const k = clamp01((t - cur.from) / (cur.to - cur.from));
+  let f = frameOf(cur, k, t);
+  const prev = i > 0 ? SCENES[i - 1] : null;
+  if (prev) {
+    const since = t - cur.from;
+    if (since < SETTLE) {
+      const u = since / SETTLE, pf = frameOf(prev, 1, t);
+      f = { z: lerp(pf.z, f.z, u), x: lerp(pf.x, f.x, u), y: lerp(pf.y, f.y, u) };
+    }
+  }
+  return f;
+}
+
+function renderScene(g, idx, t, cam) {
   const sc = SCENES[idx];
   if (!sc) return;
   const k = clamp01((t - sc.from) / (sc.to - sc.from));
   g.save();
   g.globalAlpha = 1;
-  applyCamera(g, frameOf(sc, k, t), t);
+  applyCamera(g, cam, t);
   g.strokeStyle = g.fillStyle = pal.ink;
   g.lineWidth = 2; g.lineJoin = 'round'; g.lineCap = 'round';
   try { sc.draw(g, k, raw, t, pal); }
@@ -386,7 +407,6 @@ function drawPlayhead(t) {
 /* ---------------- main loop ---------------- */
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let playing = false, lastTs = 0;
-const DISSOLVE = 1.1;                     /* seconds of cross-fade straddling each cut */
 const schedule = () => document.hidden
   ? setTimeout(() => frame(performance.now()), 33)
   : requestAnimationFrame(frame);
@@ -406,17 +426,19 @@ function render(ts) {
   drawSky(t);
   let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
   if (idx < 0) idx = SCENES.length - 1;
+  const cam = cameraAt(t);
   const nxt = SCENES[idx + 1];
-  if (nxt && nxt.from - t < DISSOLVE && t >= nxt.from - DISSOLVE) {
-    const a = clamp01((t - (nxt.from - DISSOLVE)) / DISSOLVE);
-    renderScene(bx, idx, t);
+  const dis = lerp(1.15, 0.45, clamp01(env * 1.25));      /* the chorus joins tighter than the intro */
+  if (nxt && nxt.from - t < dis) {
+    const a = clamp01((t - (nxt.from - dis)) / dis);
+    renderScene(bx, idx, t, cam);
     fx.setTransform(1, 0, 0, 1, 0, 0);
     fx.clearRect(0, 0, W, HH);
-    renderScene(fx, idx + 1, t);
+    renderScene(fx, idx + 1, t, cam);
     bx.setTransform(1, 0, 0, 1, 0, 0);
     bx.globalAlpha = a; bx.drawImage(fade, 0, 0); bx.globalAlpha = 1;
   } else {
-    renderScene(bx, idx, t);
+    renderScene(bx, idx, t, cam);
   }
   drawMotes(t);
   composite(t, reduced);
