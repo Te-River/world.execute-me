@@ -1,0 +1,6 @@
+# the source audio is not committed: it is a commercial release, and this repo is public
+*.mp3
+*.wav
+
+.DS_Store
+Thumbs.db

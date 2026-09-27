@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>world.execute (me) ; &mdash; audio analysis</title>
+<style>
+  :root { --fg:#cdd6f4; --dim:#6c7086; --acc:#94e2d5; --bg:#11111b; }
+  body { background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,Consolas,monospace; margin:24px; }
+  h1 { font-size:16px; color:var(--acc); }
+  h2 { font-size:13px; color:var(--acc); margin-top:28px; border-bottom:1px solid #313244; padding-bottom:4px; }
+  table { border-collapse:collapse; }
+  td,th { padding:2px 12px 2px 0; text-align:right; font-weight:normal; }
+  th { color:var(--dim); }
+  #log { color:var(--dim); white-space:pre-wrap; max-height:140px; overflow:auto; }
+  canvas { display:block; margin:12px 0; background:#1e1e2e; max-width:100%; }
+</style>
+</head>
+<body>
+<h1>audio analysis &mdash; Mili / world.execute (me) ;</h1>
+<p id="log">idle</p>
+<div id="report"></div>
+<script>
+/* ------------------------------------------------------------------ *
+ * Offline analysis of the MP3. Pipeline:
+ *   browser MP3 decoder -> STFT (4096/1024) -> band + onset + melody
+ *   features -> Pearson tempo grid -> greedy novelty segmentation
+ *   -> chroma key estimate -> compact 8-bit score for the video engine.
+ * No dependencies, no network beyond the local file.
+ * ------------------------------------------------------------------ */
+const AUDIO_FILE = 'Mili - world.execute (me) ;.mp3';
+const FFT = 4096, HOP = 1024, ACFFT = 8192;
+const BANDS = [[25,100],[100,200],[200,400],[400,800],[800,1600],[1600,3200],[3200,6400],[6400,16000]];
+const BAND_NAMES = ['sub','bass','lowMid','mid','hiMid','presence','brilliance','air'];
+const log = (m) => { const p = document.getElementById('log'); p.textContent = m + '\n' + p.textContent; };
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+function makeFFT(n) {
+  const rev = new Uint32Array(n), cos = new Float64Array(n / 2), sin = new Float64Array(n / 2);
+  const bits = Math.log2(n);
+  for (let i = 0; i < n; i++) { let x = i, r = 0; for (let b = 0; b < bits; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+  for (let i = 0; i < n / 2; i++) { cos[i] = Math.cos(-2 * Math.PI * i / n); sin[i] = Math.sin(-2 * Math.PI * i / n); }
+  const re = new Float64Array(n), im = new Float64Array(n);
+  const api = {
+    re, im, n,
+    forward() {
+      for (let i = 0; i < n; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+      for (let size = 2; size <= n; size *= 2) {
+        const half = size / 2, step = n / size;
+        for (let i = 0; i < n; i += size)
+          for (let j = i, k = 0; j < i + half; j++, k += step) {
+            const l = j + half, tr = re[l] * cos[k] - im[l] * sin[k], ti = re[l] * sin[k] + im[l] * cos[k];
+            re[l] = re[j] - tr; im[l] = im[j] - ti; re[j] += tr; im[j] += ti;
+          }
+      }
+    },
+    inverse() { for (let i = 0; i < n; i++) im[i] = -im[i]; this.forward(); for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; } }
+  };
+  return api;
+}
+const f = makeFFT(FFT), g = makeFFT(ACFFT);
+const win = new Float64Array(FFT);
+for (let i = 0; i < FFT; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / FFT);
+
+async function load() {
+  const ab = await (await fetch(location.origin + '/' + encodeURIComponent(AUDIO_FILE))).arrayBuffer();
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ac.decodeAudioData(ab);
+  log(`decoded ${buf.duration.toFixed(3)} s @ ${buf.sampleRate} Hz, ${buf.numberOfChannels} ch`);
+  return { buf, L: buf.getChannelData(0), R: buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0) };
+}
+
+async function frameFeatures(L, R, sr) {
+  const n = Math.max(0, Math.floor(L.length / HOP) - 1);
+  const out = {
+    t: new Float32Array(n), rms: new Float32Array(n), width: new Float32Array(n),
+    bands: Array.from({ length: 8 }, () => new Float32Array(n)),
+    centroid: new Float32Array(n), flux: new Float32Array(n), f0: new Float32Array(n),
+    voiced: new Float32Array(n), flat: new Float32Array(n), dB: new Float64Array(FFT / 2)
+  };
+  const dbPrev = new Float64Array(FFT / 2);
+  const binHz = sr / FFT;
+  const edges = BANDS.map(([a, b]) => [Math.max(1, Math.round(a / binHz)), Math.min(FFT / 2 - 1, Math.round(b / binHz))]);
+
+  for (let i = 0; i < n; i++) {
+    const off = i * HOP;
+    out.t[i] = off / sr;
+    let e = 0, s2 = 0;
+    for (let j = 0; j < FFT; j++) {
+      const m = (L[off + j] + R[off + j]) * 0.5, sd = (L[off + j] - R[off + j]) * 0.5;
+      e += m * m; s2 += sd * sd;
+      f.re[j] = m * win[j]; f.im[j] = 0;
+    }
+    out.rms[i] = Math.sqrt(e / FFT);
+    out.width[i] = out.rms[i] > 1e-5 ? Math.sqrt(s2 / e) : 0;
+    f.forward();
+    let num = 0, den = 0, geo = 0, ari = 0, flux = 0;
+    for (let k = 1; k < FFT / 2; k++) {
+      const mag = Math.hypot(f.re[k], f.im[k]);
+      const db = 20 * Math.log10(mag + 1e-9);
+      flux += Math.max(0, db - dbPrev[k]); dbPrev[k] = db;
+      num += k * binHz * mag; den += mag;
+      geo += Math.log(mag + 1e-9); ari += mag;
+    }
+    out.centroid[i] = den > 0 ? num / den : 0;
+    out.flux[i] = flux;
+    out.flat[i] = Math.exp(geo / (FFT / 2 - 1)) / (ari / (FFT / 2 - 1) + 1e-9);
+    for (let b = 0; b < 8; b++) {
+      let acc = 0;
+      for (let k = edges[b][0]; k <= edges[b][1]; k++) { const m = Math.hypot(f.re[k], f.im[k]); acc += m * m; }
+      out.bands[b][i] = Math.log10(acc / (edges[b][1] - edges[b][0] + 1) + 1e-12);
+    }
+    /* melody f0: FFT autocorrelation of the windowed frame */
+    for (let j = 0; j < FFT; j++) { g.re[j] = (L[off + j] + R[off + j]) * 0.5 * win[j]; g.im[j] = 0; }
+    for (let j = FFT; j < ACFFT; j++) { g.re[j] = 0; g.im[j] = 0; }
+    g.forward();
+    for (let k = 0; k < ACFFT; k++) { const p = g.re[k] * g.re[k] + g.im[k] * g.im[k]; g.re[k] = p; g.im[k] = 0; }
+    g.inverse();
+    const lo = Math.floor(sr / 1200), hi = Math.min(ACFFT - 1, Math.ceil(sr / 65));
+    let best = 0, bestV = -1;
+    const c0 = g.re[0] + 1e-12;
+    for (let lag = lo; lag <= hi; lag++) { const v = g.re[lag] / c0; if (v > bestV) { bestV = v; best = lag; } }
+    out.f0[i] = bestV > 0.35 ? sr / best : 0;
+    out.voiced[i] = Math.max(0, Math.min(1, bestV));
+    if ((i & 1023) === 0) { log(`stft ${i}/${n}`); await tick(); }
+  }
+  return out;
+}
+
+/* tempo: general beat histogram over inter-onset intervals (immune to the
+   lag-length bias that plain autocorrelation suffers from), then phase alignment */
+function beatTrack(flux, fps) {
+  const n = flux.length;
+  let mx = 0; for (let i = 0; i < n; i++) if (flux[i] > mx) mx = flux[i];
+  const floor = mx * 0.05, refr = fps * 0.11;
+  const on = [];
+  for (let i = 2; i < n - 2; i++) {
+    const v = flux[i];
+    if (v <= floor) continue;
+    if (!(v >= flux[i - 1] && v > flux[i - 2] && v >= flux[i + 1] && v > flux[i + 2])) continue;
+    if (on.length && i - on[on.length - 1].i < refr) {
+      if (v > on[on.length - 1].v) on[on.length - 1] = { i, v };
+      continue;
+    }
+    on.push({ i, v });
+  }
+  const T = on.map(o => o.i / fps);
+  const BPS = 24, MAXB = Math.round(BPS * 2.3);
+  const hist = new Float64Array(MAXB + 1);
+  for (let a = 0; a < T.length; a++) {
+    for (let b = a + 1; b < T.length; b++) {
+      const io = T[b] - T[a];
+      if (io > 2.2) break;
+      if (io < 0.27) continue;
+      const c = Math.round(io * BPS), w = Math.min(on[a].v, on[b].v) / mx;
+      for (let k = Math.max(1, c - 2); k <= Math.min(MAXB, c + 2); k++) hist[k] += w * Math.exp(-0.5 * (k - c) * (k - c) / 0.7);
+    }
+  }
+  const prior = (bpm) => Math.exp(-0.5 * Math.pow(Math.log(bpm / 116) / 0.62, 2));
+  const pick = (per) => { const c = Math.round(per * BPS); return c >= 1 && c <= MAXB ? hist[c] : 0; };
+  const grid = [];
+  for (let bpm = 55; bpm <= 190; bpm += 0.25) {
+    const p = 60 / bpm;
+    grid.push({ bpm, score: (pick(p) + 0.62 * pick(p / 2) + 0.38 * pick(p * 2)) * prior(bpm) });
+  }
+  grid.sort((a, b) => b.score - a.score);
+  const kept = [];
+  for (const c of grid) {
+    if (kept.some(k => Math.abs(Math.log2(k.bpm / c.bpm)) < 0.12)) continue;
+    kept.push(c); if (kept.length === 6) break;
+  }
+  const top = kept[0], P = 60 / top.bpm;
+  /* phase: offset that maximises weighted onset salience on the beat grid */
+  let bestOff = 0, bestS = -1;
+  for (let s = 0; s < 1; s += 0.02) {
+    let sc = 0;
+    for (let k = 0; k < T.length; k++) {
+      const d = Math.abs(((T[k] - s) / P) % 1), e = Math.min(d, 1 - d) * P;
+      if (e < 0.09) sc += on[k].v * (1 - e / 0.09);
+    }
+    if (sc > bestS) { bestS = sc; bestOff = s; }
+  }
+  const beats = [];
+  for (let t = bestOff; t < n / fps; t += P) beats.push(+t.toFixed(3));
+  const ratio = kept[1] && kept[1].score > 0 ? top.score / kept[1].score : 1;
+  return {
+    bpm: +top.bpm.toFixed(1), period: +P.toFixed(4), beats,
+    onsets: on.length, histogram: Array.from(hist, x => +x.toFixed(2)),
+    candidates: kept.map(k => ({ bpm: +k.bpm.toFixed(1), score: +k.score.toFixed(4) })),
+    confidence: +Math.min(1, (ratio - 1) * 1.5).toFixed(2)
+  };
+}
+
+/* structure: block the 10-D feature track per second, z-score it, take the
+   checkerboard novelty, then greedily pick N well-spaced peaks */
+function segment(fr, sr, duration, nBounds) {
+  const bins = Math.max(4, Math.round(duration));
+  const dim = 10;
+  const v = Array.from({ length: bins }, () => new Float64Array(dim));
+  const cnt = new Float64Array(bins);
+  const bad = { rms: 0, centroid: 0, bands: 0 };
+  for (let i = 0; i < fr.t.length; i++) {
+    const b = Math.min(bins - 1, Math.round(fr.t[i]));
+    cnt[b]++;
+    for (let k = 0; k < 8; k++) { const x = fr.bands[k][i]; if (Number.isFinite(x)) v[b][k] += x; else bad.bands++; }
+    const r = fr.rms[i], c = fr.centroid[i];
+    if (Number.isFinite(r) && r > 0) v[b][8] += Math.log(r); else { bad.rms++; v[b][8] += Math.log(1e-9); }
+    if (Number.isFinite(c) && c > 0) v[b][9] += Math.log(1 + c); else bad.centroid++;
+  }
+  for (let b = 0; b < bins; b++) if (cnt[b]) for (let k = 0; k < dim; k++) v[b][k] /= cnt[b];
+  for (let k = 0; k < dim; k++) {
+    let m = 0, s = 0;
+    for (let b = 0; b < bins; b++) m += v[b][k]; m /= bins;
+    for (let b = 0; b < bins; b++) s += (v[b][k] - m) ** 2; s = Math.sqrt(s / bins);
+    if (!Number.isFinite(m) || !Number.isFinite(s) || s === 0) { for (let b = 0; b < bins; b++) v[b][k] = 0; continue; }
+    for (let b = 0; b < bins; b++) v[b][k] = (v[b][k] - m) / s;
+  }
+  const w = 9, nov = new Float64Array(bins);
+  for (let b = w; b < bins - w; b++) {
+    let sum = 0;
+    for (let k = 0; k < dim; k++) {
+      let pre = 0, pos = 0;
+      for (let j = 1; j <= 3; j++) { pre += v[b - j][k]; pos += v[b + j][k]; }
+      sum += (pre - pos) ** 2;
+    }
+    nov[b] = Math.sqrt(sum / dim);
+    if (!Number.isFinite(nov[b])) nov[b] = 0;
+  }
+  const order = Array.from({ length: bins }, (_, b) => b).sort((a, b) => nov[b] - nov[a]);
+  const bounds = [];
+  for (const b of order) {
+    if (b < 8 || b > bins - 8) continue;
+    if (bounds.some(x => Math.abs(x - b) < 12)) continue;
+    bounds.push(b);
+    if (bounds.length >= nBounds) break;
+  }
+  bounds.sort((a, b) => a - b);
+  const cuts = [0, ...bounds, bins - 1];
+  const secs = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i], b = Math.max(cuts[i + 1], a + 4);
+    const n = b - a + 1;
+    const acc = new Float64Array(dim + 1);
+    for (let k = a; k <= b && k < bins; k++) for (let d = 0; d < dim; d++) acc[d] += v[k][d];
+    const avg = (d) => acc[d] / n;
+    secs.push({
+      start: a, end: +Math.min(duration, b).toFixed(2), len: +n.toFixed(1),
+      energy: +avg(8).toFixed(3), bright: +avg(9).toFixed(3),
+      low: +(avg(0) + avg(1)) / 2, mid: +(avg(3) + avg(4)) / 2, high: +(avg(6) + avg(7)) / 2,
+      novelty: +nov[Math.min(b, bins - 1)].toFixed(3)
+    });
+    if (b >= bins - 1) break;
+  }
+  /* roles: loud clusters are chorus-like, quiet ones are sparse, edges are intro/outro */
+  const es = secs.map(s => s.energy);
+  const mean = es.reduce((a, b) => a + b, 0) / es.length;
+  const sd = Math.sqrt(es.reduce((a, b) => a + (b - mean) ** 2, 0) / es.length) || 1;
+  secs.forEach((s, i) => {
+    const z = (s.energy - mean) / sd;
+    s.z = +z.toFixed(2);
+    if (i === 0) s.role = 'boot';
+    else if (i === secs.length - 1) s.role = 'exit';
+    else if (z > 0.55) s.role = 'execute';
+    else if (z < -0.55) s.role = 'idle';
+    else s.role = 'compile';
+  });
+  return { secs, nov: Array.from(nov, x => +x.toFixed(3)), mean: +mean.toFixed(3), sd: +sd.toFixed(3), bad };
+}
+
+/* key: sparse harmonic peaks, each frame's chroma unit-normalised so loud
+   sections do not outweigh quiet ones */
+async function keyEstimate(L, sr) {
+  const MAJ = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+  const MIN = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+  const NAME = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const binHz = sr / FFT, chroma = new Float64Array(12);
+  const step = HOP * 2;
+  const cnt = Math.floor((L.length - FFT) / step);
+  /* loudness gate: keep frames in the upper half of the RMS distribution */
+  const rmsAll = [];
+  for (let i = 0; i < cnt; i += 8) { let e = 0; for (let j = 0; j < FFT; j += 4) e += L[i * step + j] ** 2; rmsAll.push(Math.sqrt(e / (FFT / 4))); }
+  const sorted = rmsAll.slice().sort((a, b) => a - b), gate = sorted[Math.floor(sorted.length / 2)];
+  let used = 0;
+  for (let i = 0; i < cnt; i++) {
+    const off = i * step;
+    let e = 0;
+    for (let j = 0; j < FFT; j++) { const m = L[off + j]; e += m * m; f.re[j] = m * win[j]; f.im[j] = 0; }
+    if (Math.sqrt(e / FFT) < gate * 0.8) continue;
+    used++;
+    if ((i & 511) === 0) { log(`chroma ${i}/${cnt}`); await tick(); }
+    f.forward();
+    const frame = new Float64Array(12);
+    let norm = 0;
+    for (let k = 2; k < FFT / 2; k++) {
+      const hz = k * binHz;
+      if (hz < 60 || hz > 4200) continue;
+      const m = Math.hypot(f.re[k], f.im[k]);
+      if (m < Math.hypot(f.re[k - 1], f.im[k - 1]) || m < Math.hypot(f.re[k + 1], f.im[k + 1])) continue;
+      if (m < 2e-4) continue;
+      const pc = ((Math.round(69 + 12 * Math.log2(hz / 440)) % 12) + 12) % 12;
+      const wt = Math.log(m / 2e-4);
+      frame[pc] += wt; norm += wt * wt;
+    }
+    if (norm <= 0) continue;
+    for (let p = 0; p < 12; p++) chroma[p] += frame[p] / Math.sqrt(norm);
+  }
+  const rank = (prof) => {
+    const res = [];
+    for (let r = 0; r < 12; r++) {
+      const x = [], y = [];
+      for (let i = 0; i < 12; i++) { x.push(chroma[(i + r) % 12]); y.push(prof[i]); }
+      const mx = x.reduce((a, b) => a + b) / 12, my = y.reduce((a, b) => a + b) / 12;
+      let n = 0, dx = 0, dy = 0;
+      for (let i = 0; i < 12; i++) { n += (x[i] - mx) * (y[i] - my); dx += (x[i] - mx) ** 2; dy += (y[i] - my) ** 2; }
+      res.push({ key: NAME[r] + (prof === MAJ ? ' major' : ' minor'), r: +(n / (Math.sqrt(dx * dy) + 1e-12)).toFixed(3) });
+    }
+    return res;
+  };
+  const out = [...rank(MAJ), ...rank(MIN)].sort((a, b) => b.r - a.r).slice(0, 5);
+  out.framesUsed = used;
+  return out;
+}
+
+function quant(arr, min, max) { const u = new Uint8Array(arr.length); const d = (max - min) || 1; for (let i = 0; i < arr.length; i++) u[i] = Math.round(Math.max(0, Math.min(1, (arr[i] - min) / d)) * 255); return u; }
+function b64(u) { let s = ''; for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); }
+function range(a) { let mn = Infinity, mx = -Infinity; for (let i = 0; i < a.length; i++) { if (a[i] < mn) mn = a[i]; if (a[i] > mx) mx = a[i]; } return [mn, mx]; }
+
+function drawWave(L, fr) {
+  const cv = document.createElement('canvas'); cv.width = 1500; cv.height = 200;
+  const c = cv.getContext('2d'); c.fillStyle = '#1e1e2e'; c.fillRect(0, 0, 1500, 200);
+  for (let x = 0; x < 1500; x++) {
+    const a = Math.floor(x / 1500 * L.length), b = Math.floor((x + 1) / 1500 * L.length);
+    let pk = 0; for (let i = a; i < b; i += 16) pk = Math.max(pk, Math.abs(L[i]));
+    c.fillStyle = '#45475a'; c.fillRect(x, 100 - pk * 95, 1, pk * 190);
+  }
+  let rmax = 0; for (let i = 0; i < fr.rms.length; i++) rmax = Math.max(rmax, fr.rms[i]);
+  c.strokeStyle = '#94e2d5'; c.beginPath();
+  for (let i = 0; i < fr.t.length; i += 4) { const x = fr.t[i] / fr.t[fr.t.length - 1] * 1500, y = 195 - (fr.rms[i] / rmax) * 180; i ? c.lineTo(x, y) : c.moveTo(x, y); }
+  c.stroke();
+  c.strokeStyle = '#f38ba8'; c.setLineDash([4, 4]);
+  for (let i = 0; i < fr.flux.length; i += 2) {
+    const x = fr.t[i] / fr.t[fr.t.length - 1] * 1500, h = Math.min(60, fr.flux[i] / 12);
+    if (h > 6) { c.beginPath(); c.moveTo(x, 200); c.lineTo(x, 200 - h); c.stroke(); }
+  }
+  c.setLineDash([]); c.lineWidth = 2; c.strokeStyle = '#f9e2af';
+  document.getElementById('report').appendChild(cv);
+}
+function drawNovelty(nov, secs) {
+  const cv = document.createElement('canvas'); cv.width = 1500; cv.height = 90;
+  const c = cv.getContext('2d'); c.fillStyle = '#1e1e2e'; c.fillRect(0, 0, 1500, 90);
+  let mx = 0; for (const v of nov) mx = Math.max(mx, v);
+  c.strokeStyle = '#89b4fa'; c.beginPath();
+  nov.forEach((v, i) => { const x = i / nov.length * 1500, y = 88 - v / mx * 80; i ? c.lineTo(x, y) : c.moveTo(x, y); });
+  c.stroke();
+  c.fillStyle = '#f38ba8'; for (const s of secs) c.fillRect(s.start / nov.length * 1500, 0, 1, 90);
+  document.getElementById('report').appendChild(cv);
+}
+
+async function run() {
+  const t0 = performance.now();
+  const sig = await load();
+  const { L, R } = sig, sr = sig.buf.sampleRate;
+  const fr = await frameFeatures(L, R, sr);
+  const fps = sr / HOP;
+  const duration = L.length / sr;
+  const bt = beatTrack(fr.flux, fps);
+  const sg = segment(fr, sr, duration, 13);
+  const key = await keyEstimate(L, sr);
+  let peak = 0, clip = 0, e = 0;
+  for (let i = 0; i < L.length; i++) { const a = Math.abs(L[i]); if (a > peak) peak = a; if (a > 1) clip++; e += L[i] * L[i]; }
+  const loud = { peak: +peak.toFixed(4), rms: +Math.sqrt(e / L.length).toFixed(4), clippedSamples: clip };
+  const first = fr.rms.findIndex(v => v > 0.02);
+  let lastI = fr.rms.length - 1; while (lastI > 0 && fr.rms[lastI] <= 0.02) lastI--;
+  const silence = { leadIn: +(first * HOP / sr).toFixed(3), tail: +((fr.rms.length - lastI) * HOP / sr).toFixed(3) };
+
+  /* cross-check: do the detected phrase boundaries land on bar lines of the
+     estimated tempo? a real tempo makes them converge to ~0 ms error */
+  const bar = bt.period * 4;
+  let alignSum = 0, alignN = 0;
+  for (let i = 1; i < sg.secs.length; i++) { const s = sg.secs[i].start, r = s % bar; alignSum += Math.min(r, bar - r); alignN++; }
+  const validation = { bar: +bar.toFixed(3), phrases: alignN, meanBarErrorMs: +(alignSum / alignN * 1000).toFixed(1) };
+  log(`phrase boundaries vs ${bt.bpm} BPM bar lines: mean error ${validation.meanBarErrorMs} ms over ${alignN} cadences`);
+  drawWave(L, fr); drawNovelty(sg.nov, sg.secs);
+  const rb = fr.bands.map(b => range(b)), rm = range(fr.rms), rc = range(fr.centroid),
+        rf = range(fr.flux), rw = range(fr.width), rp = range(fr.f0), rl = range(fr.flat);
+  const frames = {};
+  for (let b = 0; b < 8; b++) frames['b' + b] = b64(quant(fr.bands[b], rb[b][0], rb[b][1]));
+  frames.rms = b64(quant(fr.rms, 0, rm[1]));
+  frames.centroid = b64(quant(fr.centroid, 0, rc[1]));
+  frames.flux = b64(quant(fr.flux, 0, rf[1]));
+  frames.width = b64(quant(fr.width, 0, rw[1]));
+  frames.f0 = b64(quant(fr.f0, 0, rp[1]));
+  frames.voiced = b64(quant(fr.voiced, 0, 1));
+  frames.flat = b64(quant(fr.flat, 0, rl[1]));
+
+  window.__score = {
+    meta: {
+      file: AUDIO_FILE, title: 'world.execute (me) ;', artist: 'Mili', album: 'Miracle Milk', track: '11',
+      duration: +duration.toFixed(3), sampleRate: sr, hopMs: +(HOP / sr * 1000).toFixed(3), frames: fr.t.length,
+      container: { mp3: 'MPEG-1 Layer III', bitrate: '320 kbps', sourceRate: 44100, encoder: 'Lavf58.76.100' },
+      loudness: loud, silence
+    },
+    tempo: bt, key, validation, sections: sg.secs, structure: { mean: sg.mean, sd: sg.sd },
+    bands: BAND_NAMES,
+    ranges: { bands: rb, rms: rm, centroid: rc, flux: rf, width: rw, f0: rp, flat: rl },
+    frames
+  };
+  const tbl = `<h2>structure</h2><table><tr><th>#</th><th>from</th><th>to</th><th>len</th><th>role</th><th>energy z</th><th>bright</th><th>low</th><th>high</th><th>novelty</th></tr>` +
+    sg.secs.map((s, i) => `<tr><td>${String(i + 1).padStart(2, '0')}</td><td>${s.start.toFixed(0)}</td><td>${s.end.toFixed(0)}</td><td>${s.len}</td><td>${s.role}</td><td>${s.energy} (${s.z})</td><td>${s.bright.toFixed(2)}</td><td>${s.low.toFixed(2)}</td><td>${s.high.toFixed(2)}</td><td>${s.novelty}</td></tr>`).join('') + '</table>' +
+    `<h2>tempo / key</h2><pre>${JSON.stringify({ bpm: bt.bpm, period: bt.period, beats: bt.beats.length, confidence: bt.confidence, candidates: bt.candidates, key: key.slice(0, 3), keyFrames: key.framesUsed, loud, silence }, null, 1)}</pre>`;
+  document.getElementById('report').insertAdjacentHTML('beforeend', tbl);
+  window.__summary = JSON.stringify({
+    bpm: bt.bpm, per: bt.period, conf: bt.confidence, cand: bt.candidates.map(c => c.bpm), onsets: bt.onsets, val: validation,
+    key: key.slice(0, 3).map(k => k.key + ':' + k.r), keyFrames: key.framesUsed, loud, silence, bad: sg.bad,
+    secs: sg.secs.map(s => [s.start, s.end, s.role, s.energy, +s.bright.toFixed(2), s.z, s.novelty])
+  });
+  log(`done in ${Math.round(performance.now() - t0)} ms`);
+  return { seconds: Math.round((performance.now() - t0) / 1000), jsonKB: Math.round(JSON.stringify(window.__score).length / 1024) };
+}
+</script>
+</body>
+</html>

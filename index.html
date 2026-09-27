@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>world.execute (me) ; — audio-reactive music video</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: #08090d; overflow: hidden; }
+  body {
+    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, "Noto Sans Mono", monospace;
+    color: #cdd6f4; letter-spacing: .02em;
+  }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- captions: English primary, Chinese subtitle ---------- */
+  :root { --rim: #cfe0f5; --hot: #94a8c8; }
+  #caps { position: fixed; left: 0; right: 0; bottom: 14vh; text-align: center; padding: 0 8vw;
+          pointer-events: none; transition: opacity .5s; }
+  body.nocaps #caps { opacity: 0; }
+  #title, #subtitle { margin: 0; opacity: 0; transform: translateY(14px); }
+  #title { font-size: clamp(18px, 3vw, 40px); font-weight: 500; letter-spacing: .13em; color: var(--ink);
+           text-shadow: 0 0 16px var(--halo), 0 0 34px var(--halo), 0 0 60px var(--halo); }
+  #subtitle { margin-top: 12px; font-size: clamp(13px, 1.6vw, 20px); font-weight: 400; letter-spacing: .2em;
+              color: var(--ink); opacity: .9;
+              font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+              text-shadow: 0 0 14px var(--halo), 0 0 28px var(--halo); }
+  #title.on, #subtitle.on { animation: rise .5s cubic-bezier(.16,1.1,.3,1) forwards; }
+  /* the sung all-caps words land harder — a pop of the accent colour, not a neon glow */
+  #title.punch { font-size: clamp(26px, 4.6vw, 66px); font-weight: 700; letter-spacing: .22em; color: var(--hot);
+                 text-shadow: 0 0 20px var(--halo), 0 0 44px var(--halo); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  /* ---------- analysis overlay: off unless asked for, this is a film ---------- */
+  #hud { position: fixed; top: 18px; left: 20px; display: grid; gap: 3px; opacity: 0;
+         transition: opacity .35s; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  body.hud #hud { opacity: .9; }
+  #hud .row { display: flex; align-items: center; gap: 8px; }
+  #hud b { width: 52px; font-weight: 400; color: #585b70; }
+  #hud span { color: #bac2de; }
+  .meter { width: 118px; height: 5px; background: #1b1d28; }
+  .meter i { display: block; height: 100%; width: calc(var(--v, 0) * 100%); background: #94e2d5; }
+  #hud-bands { display: flex; gap: 4px; align-items: flex-end; margin-top: 9px; height: 54px; }
+  .band { position: relative; width: 7px; height: 100%; background: #14161f; overflow: hidden; }
+  .band i { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--v, 0) * 100%);
+            background: linear-gradient(#f38ba8, #94e2d5); }
+
+  /* ---------- runtime console ---------- */
+  #console { position: fixed; left: 20px; bottom: 92px; width: min(46ch, 44vw); display: grid; gap: 2px; }
+  #console .entry { opacity: 0; transform: translateX(-8px); transition: opacity .5s, transform .5s;
+                    color: var(--ink); font-size: 11px; text-shadow: 0 0 12px var(--halo); }
+  #console .entry.on { opacity: .85; transform: none; }
+  #console .entry.big { color: #f5e0e6; font-size: 12px; letter-spacing: .06em; }
+  #console .entry:nth-child(n+5) { opacity: .35; }
+  #console .ts { color: #45475a; }
+  #console .lv { color: #89b4fa; text-transform: uppercase; font-size: 10px; }
+
+  /* ---------- transport ---------- */
+  #transport { position: fixed; left: 0; right: 0; bottom: 0; padding: 26px 20px 12px;
+               background: linear-gradient(to top, rgba(10,11,16,.92), rgba(10,11,16,.5) 60%, rgba(10,11,16,0)); }
+  #wave { width: 100%; height: 40px; display: block; cursor: pointer; opacity: .85; }
+  #meta-line { margin-top: 6px; color: #6c7086; display: flex; gap: 14px; flex-wrap: wrap; }
+  #keys { color: #3a3d4d; margin-top: 2px; }
+  #warn { position: fixed; right: 20px; top: 18px; max-width: 34ch; color: #f38ba8; opacity: 0;
+          transition: opacity .4s; text-align: right; }
+
+  /* ---------- overlays ---------- */
+  .screen { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center;
+            gap: 20px; text-align: center; background: rgba(6, 7, 11, .82); backdrop-filter: blur(3px);
+            transition: opacity .7s; }
+  .screen.off { opacity: 0; pointer-events: none; }
+  #end { opacity: 0; pointer-events: none; }
+  #end.on { opacity: 1; pointer-events: auto; }
+  .screen h2 { margin: 0; font-size: clamp(26px, 5vw, 64px); font-weight: 400; letter-spacing: .22em; color: #e8ebf7; }
+  .screen .cn { margin: 0; color: #94e2d5; letter-spacing: .2em; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  .screen dl { display: grid; grid-template-columns: auto auto; gap: 2px 18px; margin: 0; color: #a6adc8; }
+  .screen dt { color: #585b70; text-align: right; }
+  .screen dd { margin: 0; text-align: left; }
+  .go { font: inherit; letter-spacing: .24em; padding: 12px 30px; color: #11111b; background: #94e2d5;
+        border: 0; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .go:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(148, 226, 213, .35); }
+  .hint { color: #45475a; max-width: 52ch; }
+
+  @media (max-width: 900px) { #console, #keys { display: none; } #caps { bottom: 26vh; } }
+</style>
+</head>
+<body data-act="boot">
+<canvas id="stage"></canvas>
+
+<div id="caps">
+  <h1 id="title"></h1>
+  <p id="subtitle"></p>
+</div>
+
+<header id="hud">
+  <div class="row"><b>PHASE</b><span id="hud-act">01 / BOOT</span></div>
+  <div class="row"><b>TC</b><span id="hud-tc">--:--</span></div>
+  <div class="row"><b>TEMPO</b><span id="hud-bpm">--</span></div>
+  <div class="row"><b>KEY</b><span id="hud-key">--</span></div>
+  <div class="row"><b>RMS</b><div id="hud-meter" class="meter"><i></i></div></div>
+  <div id="hud-bands"></div>
+</header>
+
+<div id="console"></div>
+
+<footer id="transport">
+  <canvas id="wave" width="1400" height="40"></canvas>
+  <div id="meta-line"></div>
+  <div id="keys">SPACE play/pause &middot; &larr; &rarr; seek 5s &middot; [ ] scene &middot; C captions &middot; H analysis overlay &middot; M mute &middot; F fullscreen</div>
+</footer>
+
+<div id="warn"></div>
+
+<section id="start" class="screen">
+  <h2>world.execute (me) ;</h2>
+  <p class="cn">一支由音频分析驱动的乐曲影像</p>
+  <dl id="facts"></dl>
+  <button class="go" type="button">&#9654;&nbsp; EXECUTE</button>
+  <p class="hint">Visuals are driven by an offline analysis of the MP3 itself (spectrum, onset flux, beat grid, melody, structure), not by a random generator. Audio: Mili &mdash; Miracle Milk.</p>
+</section>
+
+<section id="end" class="screen">
+  <h2>exit code 0</h2>
+  <p class="cn">进程结束，返回值是她</p>
+  <button class="go" type="button">&#8635;&nbsp; RE-RUN</button>
+</section>
+
+<audio id="track" preload="auto" src="Mili%20-%20world.execute%20%28me%29%20%3B.mp3"></audio>
+<script src="mv/score.data.js"></script>
+<script src="mv/story.js"></script>
+<script src="mv/lyrics.js"></script>
+<script src="mv/scenes.js"></script>
+<script src="mv/mv.js"></script>
+</body>
+</html>
