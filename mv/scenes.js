@@ -228,6 +228,22 @@ function sheet(g, col, t, F, o) {
     };
     ridge(hy + 4, 132, 1.2, pale);
     ridge(hy + 26, 74, 3.4, deep);
+    /* the town: the snowbound world of NEKODAY, sitting on the horizon line */
+    g.fillStyle = tint(col.cool, '#000000', 0.52);
+    for (let i = 0; i < 14; i++) {
+      const x = 40 + i * 112 + ((i * 37) % 40), w = 44 + ((i * 23) % 34), hh = 22 + ((i * 31) % 40);
+      g.beginPath();
+      g.moveTo(x, hy + 6); g.lineTo(x, hy - hh);
+      g.lineTo(x + w / 2, hy - hh - 14); g.lineTo(x + w, hy - hh); g.lineTo(x + w, hy + 6);
+      g.closePath(); g.fill();
+      if (i % 3 === 0) g.fillRect(x + w * 0.35, hy - hh * 0.6, 7, 7);          // one lit window
+    }
+    g.strokeStyle = tint(col.cool, '#000000', 0.62); g.lineWidth = 3;
+    for (let i = 0; i < 5; i++) {                                              // telephone poles and wires
+      const x = 160 + i * 320;
+      G.line(g, x, hy + 6, x, hy - 74); G.line(g, x - 16, hy - 60, x + 16, hy - 60);
+      if (i) G.poly(g, [[x - 320, hy - 60], [x - 160, hy - 40], [x, hy - 60]], false);
+    }
     g.strokeStyle = tint(col.cool, '#000000', 0.45); g.lineWidth = 2.6;
     G.line(g, -80, hy + 4, DW + 80, hy + 4);
     if (o.sun !== false) {
@@ -414,7 +430,7 @@ S.push({ id: 'globe', from: 16, to: 29.7,
 S.push({ id: 'geometry', from: 29.7, to: 44.45,
   frame: (k) => ({ z: 1.06, x: DW * (0.4 + k * 0.16), y: DH * 0.44 }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 1, board: false, horizon: false });
+    sheet(g, col, t, F, { grid: 1, board: false, hy: DH * 0.8 });    /* she writes on the world itself */
     g.lineWidth = 3; g.strokeStyle = INK; g.fillStyle = INK;
     if (t < 33.41) {
       const cx = 620, cy = 400;
@@ -696,6 +712,12 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
       const dw = 250 * (1 - oback(seg(t, 112.22, 116.4)));
       g.lineWidth = 4;
       G.poly(g, [[DW * 0.84 - 125, GY], [DW * 0.84 - 125, GY - 340], [DW * 0.84 - 125 + 250 - dw, GY - 340], [DW * 0.84 - 125 + 250 - dw, GY]]);
+      /* and he goes: a second silhouette crossing the threshold, shrinking out of the world */
+      const out = seg(t, 112.22, 116.0);
+      if (out > 0 && out < 1) {
+        g.fillStyle = INK; g.strokeStyle = INK;
+        G.figure(g, lerp(DW * 0.56, DW * 0.83, oback(out)), GY, 1.2 * (1 - out * 0.78), 'stand', t, null, 0);
+      }
     } else if (t < 124.89) {
       const u = oback(seg(t, 117.27, 118.6));
       const nx = DW * 0.5, ny = DH * 0.4;
@@ -769,7 +791,7 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
 
 /* 10a — 147.66..155.20 s: the chant. Hard framing cuts every two repetitions. */
 S.push({ id: 'chant', from: 147.66, to: 155.20,
-  frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.6, x: DW * 0.5, y: DH * 0.32 } : { z: 1.0, x: DW * 0.42, y: DH * 0.5 },
+  frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.22, x: DW * 0.5, y: DH * 0.36 } : { z: 1.0, x: DW * 0.5, y: DH * 0.5 },
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false, dark: true });
     const hit = Math.min(7, Math.floor((t - 147.66) / 0.94));
@@ -780,8 +802,8 @@ S.push({ id: 'chant', from: 147.66, to: 155.20,
 
 /* 10b — 155.20..158.90 s: the same word becomes 死刑. Closer, still cutting. */
 S.push({ id: 'sentence', from: 155.20, to: 158.90,
-  frame: (k, t) => [{ z: 1.9, x: DW * 0.5, y: DH * 0.3 }, { z: 1.35, x: DW * 0.62, y: DH * 0.52 },
-                    { z: 2.2, x: DW * 0.4, y: DH * 0.42 }, { z: 1.15, x: DW * 0.5, y: DH * 0.6 }][Math.floor((t - 155.2) / 0.94) % 4],
+  frame: (k, t) => [{ z: 1.22, x: DW * 0.5, y: DH * 0.34 }, { z: 1.1, x: DW * 0.5, y: DH * 0.52 },
+                    { z: 1.22, x: DW * 0.5, y: DH * 0.44 }, { z: 1.0, x: DW * 0.5, y: DH * 0.58 }][Math.floor((t - 155.2) / 0.94) % 4],
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.74, sun: false, dark: true });
     const hit = Math.min(3, Math.floor((t - 155.2) / 0.94));
@@ -808,7 +830,7 @@ S.push({ id: 'count', from: 158.90, to: 161.58,
 
 /* 10d — 161.58..169.82 s: give them all the execution. The cage comes down. */
 S.push({ id: 'give', from: 161.58, to: 169.82,
-  frame: (k) => ({ z: 1.05 + k * 0.45, x: DW * 0.5, y: DH * (0.52 - k * 0.06) }),
+  frame: (k) => ({ z: 1.02 + k * 0.2, x: DW * 0.5, y: DH * (0.52 - k * 0.06) }),
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.7, sun: false, dark: true });
     code(g, 18, 240, 150 - 6 * 62, 62);             /* the whole program has run */
@@ -839,7 +861,7 @@ S.push({ id: 'study', from: 177.24, to: 184.54,
   frame: (k, t) => t < 179.92 ? { z: 1.7, x: DW * 0.28, y: DH * 0.32 }
     : t < 180.85 ? { z: 1.55, x: DW * 0.52, y: DH * 0.3 } : { z: 1.15, x: DW * 0.5, y: DH * 0.4 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 1, board: false, horizon: false });
+    sheet(g, col, t, F, { grid: 1, board: false, hy: DH * 0.8 });    /* she writes on the world itself */
     g.lineWidth = 4; g.strokeStyle = INK; g.fillStyle = INK;
     const u = seg(t, 177.9, 180.6);
     G.sine(g, 180, DH * 0.32, 420, 72, 2, t * 1.6, 0, u);
@@ -864,7 +886,7 @@ S.push({ id: 'study', from: 177.24, to: 184.54,
 S.push({ id: 'free', from: 184.54, to: 193,
   frame: (k) => ({ z: 1.3 - k * 0.32, x: DW * 0.5, y: DH * (0.4 + k * 0.08) }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 1, board: false, horizon: false });
+    sheet(g, col, t, F, { grid: 1, board: false, hy: DH * 0.8 });    /* she writes on the world itself */
     confetti(g, t, F, 40, col);
     g.lineWidth = 4; g.strokeStyle = INK; g.fillStyle = INK;
     G.sine(g, 180, DH * 0.3, 420, 72, 2, t * 1.6);

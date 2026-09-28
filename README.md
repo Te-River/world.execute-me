@@ -1,105 +1,117 @@
 # world.execute-me
 
-基于 Qwen 的 HTML 仓库，用于表现 Mili —《world.execute (me) ;》这首乐曲的视觉效果。
-An HTML music video whose pictures are driven by a measured analysis of the MP3 itself.
+一个纯 HTML 的仓库，用来表现 Mili —《world.execute (me) ;》这首乐曲的 MV。
+画面不是随机生成的可视化，而是**由对这个 MP3 文件本身实测出来的数据驱动**的。
 
-## Run it
-
-```
-open index.html          # double-click works: everything is local, no build, no CDN
-```
-
-The folder must keep this layout, because the player loads the audio and the score by relative path:
+## 怎么跑
 
 ```
-index.html                      the video
-Mili - world.execute (me) ;.mp3 the track (not committed; drop it next to index.html)
-mv/mv.js                        player: audio clock, camera, film treatment, captions
-mv/scenes.js                    the storyboard — 14 vector scenes keyed to the lyrics
-mv/lyrics.js                    English lyric + timestamps, with rewritten Chinese
-mv/story.js                     act map, palettes, runtime-console fiction
-mv/score.data.js                generated analysis (window.SCORE) — do not hand-edit
-analysis/analyze.html           the analysis pipeline, runnable and inspectable in a browser
+双击 index.html 即可            # 全部本地资源，不需要构建、不联网、不装任何依赖
 ```
 
-Controls: `SPACE` play/pause · `←/→` seek 5 s · `[ ]` previous/next act · `C` captions · `M` mute · `F` fullscreen · click the loudness strip to seek.
+目录结构（播放器按相对路径读取音频与数据，所以要保持这个布局）：
 
-## What the analysis measured
+```
+index.html                      MV 本体
+Mili - world.execute (me) ;.mp3 原曲，留在仓库目录里（见下方说明）
+mv/mv.js                        播放器：音频时钟、全局摄影机、溶解转场、胶片处理、字幕
+mv/scenes.js                    分镜本 —— 18 个镜头，逐句对齐歌词
+mv/lyrics.js                    英文歌词与时间戳（中文为本人重译）
+mv/story.js                     幕表、配色、运行日志文案
+mv/score.data.js                生成的分析数据（window.SCORE），不要手改
+analysis/analyze.html           分析管线本体，可在浏览器里打开复现
+analysis/contact-sheet.jpg      一版逐镜头接触表（校验用）
+```
 
-Everything below came out of `analysis/analyze.html`, which decodes the file with the
-browser's own MP3 decoder and runs a plain-JS DSP chain (no libraries, no ffmpeg):
+操作键：`空格` 播放/暂停 · `←/→` 快进快退 5 秒 · `[ ]` 上/下一个镜头 · `C` 字幕开关 · `H` 分析数据浮层 · `M` 静音 · `F` 全屏 · 点击底部的响度曲线可直接跳转。
 
-| measured | value |
+## 实测出来的结果
+
+下面每一个数字都来自 `analysis/analyze.html`：它用浏览器自带的 MP3 解码器拿到 PCM，
+再跑一条纯 JS 的 DSP 链（无任何第三方库、无 ffmpeg）。
+
+| 项目 | 实测值 |
 | --- | --- |
-| length | 211.907 s (3:31.91) |
-| container | MPEG-1 Layer III, 320 kbps, 44.1 kHz stereo, encoder `Lavf58.76.100` |
-| tags | Mili — *world.execute (me) ;*, album *Miracle Milk*, track 11 |
-| decode domain | 48 kHz float PCM (browser resample), 9 932 analysis frames @ 21.33 ms |
-| spectrum | 8 log bands, 25 Hz … 16 kHz, Hann window, 4 096-point FFT, 75 % overlap |
-| loudness | peak 1.0397, RMS 0.3361, 3 062 clipped samples — a hot master |
-| silence | lead-in 0.107 s, tail 0.021 s |
-| key | A minor (Krumhansl–Schmuckler r = 0.479), then F major 0.323, G major 0.275 |
-| tempo | 128.3 BPM, confidence 0.15; competing 88.5 / 66 BPM |
-| structure | 14 novelty boundaries → 0/15/31/44/60/74/88/104/119/134/147/163/175/193 s |
-| melody | FFT autocorrelation f0, 65–1 200 Hz, with a correlation gate |
-| stereo | side/mid energy ratio (the visual spreads with it) |
+| 时长 | 211.907 秒（3:31.91） |
+| 封装 | MPEG-1 Layer III，320 kbps，44.1 kHz 立体声，编码器 `Lavf58.76.100` |
+| 标签 | Mili — *world.execute (me) ;*，专辑 *Miracle Milk*，第 11 轨 |
+| 分析域 | 48 kHz 浮点 PCM（浏览器重采样），9 932 帧 @ 21.33 ms |
+| 频谱 | 8 个对数频带（25 Hz – 16 kHz），Hann 窗，4096 点 FFT，75% 重叠 |
+| 响度 | 峰值 1.0397，RMS 0.3361，3 062 个削波采样点（母带压得很满） |
+| 静音 | 起始 0.107 秒，结尾余音 0.021 秒 |
+| 调性 | A 小调（Krumhansl–Schmuckler r = 0.479），其后 F 大调 0.323、G 大调 0.275 |
+| 速度 | 128.3 BPM，置信度 0.15，竞争解 88.5 / 66 |
+| 结构 | 14 个新颖度边界 → 0/15/31/44/60/74/88/104/119/134/147/163/175/193 秒 |
+| 旋律 | FFT 自相关求 f0，65–1 200 Hz，带相关性门限 |
+| 立体声 | 侧/中能量比（画面横向扩散跟着它走） |
 
-The tempo is reported, not trusted: the detected phrase boundaries miss that bar grid by
-556 ms on average, which is what a random offset would give (bar/4 = 468 ms). So the video
-does not ride a metronome — it rides onsets peak-picked off the stored flux envelope, which
-are in phase with the recording by construction.
+**速度这个值我没有直接采信。** 检测到的乐句边界相对该小节网格平均偏差 556 ms，
+而随机偏移的期望值是 468 ms（bar/4）——也就是说结构并不支持这个节拍。
+但歌词提供了独立的旁证：2:27.66 起的 12 次 `EXECUTION` 诵唱间隔 0.94 秒
+= 每词两拍 → 127.5 BPM，与实测 128.3 BPM 吻合。
+所以画面里的脉冲不跟节拍器，而是跟从 flux 包络上实测出的 onset（全曲约 500 个），
+它们与录音天然同相。
 
-## What is on screen
+## 画面在做什么
 
-The video is a storyboard, not a spectrum readout. Fourteen scenes are keyed to the lyric
-lines that motivate them — the power line and the fuse, the chess board, an object being
-created, the points that grow axes, the circle whose circumference is handed over, the sine
-wave you can sit on its tangents, the curve approaching its limit, AC straightening into DC,
-the lids closing, the timeline scrubbed back before A.D., the overlapping circles, the
-eggplant, the tomato, the tabby cat, the halo and the PROOF stamp, Venus morphing into Mars,
-the clock from AM to PM, the S/M swap, the trance rings, the progress bar that finally
-reaches COMPLETION, the door that closes on the fifth "you have left", the node with every
-link cut, the shards swept away, the ILLEGAL ARGUMENTS dialog, twelve red stamps stacking
-into a wall while she counts to six in six languages, the equation she mistakes for love,
-the grid retracting, and one last red line over a blinking prompt.
+它是一支 MV，不是频谱读数。18 个镜头逐句对齐歌词：电闸与输电线、摆开的棋子、
+被创建的**对象**、散点长出坐标轴、圆与展开的周长、可以坐上去的切线、趋近无穷的渐近线、
+交流整形成直流、合上的眼睑、旋涡、被倒着擦过的时间轴、两个圆交叠、
+光标与心、茄子/番茄/狸猫的静物标本、♀ 走到 ♂、从早到晚的钟面、S 与 M 换位、
+出神的同心圆、进度条走到 COMPLETION、第五遍"你走了"时关上的门、被切断所有连线的孤岛、
+删去的碎片、`EXECUTION` 诵唱、六语计数、爱的代数式、收光的房间、最后一行红。
 
-The analysis is what the scenes are painted *on*. The song is brisk — 128 BPM, staccato, a
-music-box timbre — so the picture moves with it rather than floating: the camera drifts
-faster while the mix is dense, the girl bobs on the loudness envelope, props land with an
-overshoot, and confetti density rides the high bands. Nothing flashes on the beat (no
-slice-glitch, no strobe): the only per-onset motion is a 2 % camera lean, and brightness
-changes only through a bloom that swells over about a second.
+逐句对齐是**审计**出来的，不是感觉：SATISFACTION 的心原先在 61.95 秒就出现了（比歌词早 3.4 秒）、
+DISHEARTENED 处错放了 ILLEGAL ARGUMENTS 对话框（早 6.3 秒）、INITIALIZATION 的字段只是匿名矩形。
+现在心落在 65.39、"无心"落在 124.89、堆栈跟踪落在 131.22，字段是真正的赋值语句
+——其中 `me.heart = null` 用红色，正是歌里那句"used before defined"。
 
-Concretely:
+`EXECUTION` 段不再是红色长条图，而是**程序清单本身**：每诵唱一次，高亮往下走一行，
+最后落在 `throw` / `process.kill(me)` / `exit(0)` / `return her;`。
+`If I can have you back` 则把这些行逐行反向划掉。
 
-- **paper** — the whole film is drawn on light paper with ink line art; `sheet()` reverses
-  to red ink on black paper for the EXECUTION act, and the outro drains the light out;
-- **exposure** rides the log-mapped RMS curve, so a quiet bar is literally dimmer;
-- **colour** is per act, cross-fading with a 0.45 s time constant, and the caption ink,
-  its halo and the vignette strength all follow the palette's luminance;
-- **onsets** are peak-picked off the stored flux envelope (~500 in this song) and drive the
-  console lines, the chant's framing cuts and the camera lean — in phase with the recording;
-- **transitions** are a real cross-dissolve through an offscreen buffer, shortened from 1.1 s
-  to 0.3 s as the loudness rises, so the chorus cuts harder than the intro;
-- every feature is re-calibrated to its own 3rd/97th percentile of this song, because the
-  stored global min/max squashes spiky features such as spectral flux.
+## 关于中文与典故
 
-## About the Chinese
+英文是原唱，中文是我重写的，不参照原 LRC 的翻译——因为几个双关只有选对中文词才立得住：
+`OBJECT CREATION` → 创建**对象**（既是实例，也是恋人）；`EXECUTION` 在前半保持"执行"、
+到诵唱后半才变"处决"（执行代码与执行死刑共用这个动词）；`To AC to DC` → 由**交流**换成直流；
+`DISHEARTENED` → **无心**（无情，也是 heart 这个组件被删除）；`LIMITATIONS` → 极限。
 
-The English is the song's own. The Chinese is rewritten rather than copied from the LRC,
-because several lines only work if the pun survives the crossing: `OBJECT CREATION` becomes
-创建对象 (对象 is both an instance and a lover), `EXECUTION` stays 执行 through the first
-chant and only then turns into 处决 (执行代码 and 执行死刑 share the verb), `To AC to DC`
-becomes 由交流，换成直流 (交流 is alternating current and also company), `DISHEARTENED`
-becomes 无心 (heartless, and: the heart component deleted), `Set up our new world` becomes
-捏一个给我们的世界, which is meant to recall 女娲抟土造人 — she is made, and she is made of
-data. The Zhuangzi butterfly is not in the captions; a machine would log it, so it sits in
-the runtime console as `butterfly_check: who is dreaming whom`.
+典故也换到了这首歌真正所属的脉络里（我最初误用了中文典故）：
+被写上一个词才活动的**戈仑**（对应 OBJECT CREATION / INITIALIZATION，最后的 EXECUTION 就是那一笔擦除）、
+**柏拉图的洞穴**（对应 trapped in this strange strange SIMULATION）、
+**巴别塔**（EIN/DOS/TROIS/NE/FEM/LIU 六种语言）、**俄耳甫斯回头**（If I can have you back）。
+庄周梦蝶没有进字幕——机器会把它写在日志里，所以它出现在运行控制台：
+`butterfly_check: who is dreaming whom`。
 
-## Rebuilding the score
+## 颜色与转场（两轮返工的记录）
 
-Serve the folder (`python -m http.server 8137 --bind 127.0.0.1`), open
-`http://127.0.0.1:8137/analysis/analyze.html`, then run `run()` from the console. It takes
-about 35 s and prints the structure table, the waveform with its onset comb, and the novelty
-track with the chosen boundaries. Export with
-`'window.SCORE=' + JSON.stringify(window.__score)` into `mv/score.data.js`.
+颜色是被**量出来**的问题：改成亮色纸面后，亮段的饱和度实测只有 0.01–0.04，等于白纸配灰线。
+现在每一幕是一整块饱和的地面色 + 两档明度的山脊 + 一颗更大的饱和太阳，
+纸纹用白色反刻在色面上；调色板按"暖白日 → 绿笔记本 → 珊瑚色副歌 → 赭石崩塌 →
+黄昏新幕 → 黑红诵唱 → 丁香揭示 → 冷青结尾"走一条连续的色程。
+
+转场的病根不在溶解本身，而在**每个镜头各自持有摄影机**：溶解时新旧两幅画用不同的缩放，
+于是变成"带淡入的跳切"。现在全片只有一条摄影机轨道，切点处保持上一镜落幅、
+用 0.8 秒滑入下一镜起幅；两侧同时插值本身就是个 bug（切点处会弹回），已删除。
+溶解时长随响度从 1.15 秒收紧到 0.45 秒——副歌接缝比前奏更紧。
+
+刻意**没有**做的：跟随鼓点的闪光、抖动、切片故障。那属于技术演示而不属于 MV；
+亮度只通过一个约 1 秒起落的柔光（bloom）变化，onset 只让摄影机轻微前倾 2%。
+
+## 关于那个 .mp3
+
+源音频留在仓库目录里、不删除，MV 直接引用它。
+但它**没有**被提交到 git：这是一张商业发行的专辑，而仓库是公开的，
+把原曲推上去会有版权风险（DMCA）。如果你确认要一并发布，说一声我就把它纳入版本管理。
+
+## 重新生成数据
+
+```
+python -m http.server 8137 --bind 127.0.0.1
+打开 http://127.0.0.1:8137/analysis/analyze.html
+在控制台执行 run()
+```
+
+约 35 秒后，页面会打印结构表、带 onset 梳状的波形图、以及标出边界的新颖度曲线。
+导出：`'window.SCORE=' + JSON.stringify(window.__score)`，写入 `mv/score.data.js`。

@@ -288,6 +288,7 @@ function composite(t, reduced) {
 
 /* ---------------- captions (the song's own words) ---------------- */
 const PUNCH = /^[A-Z0-9 .,;:'"()!-]{2,}$/;
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 for (const l of LYRICS) l.punch = PUNCH.test(l.en);
 let capI = 0;
 function captionAt(t) {
@@ -306,6 +307,9 @@ function updateText(t) {
     curAct = i;
     ui.act.textContent = `${String(i + 1).padStart(2, '0')} / ${act.tag.toUpperCase()}`;
     document.body.dataset.act = act.tag;
+    /* the printed frame belongs to the still acts; the chant needs the page bare */
+    document.body.classList.toggle('framed', act.tag !== 'execution' && act.tag !== 'collapse');
+    el('act-mark').textContent = ROMAN[i] || '';
     for (const c of act.cards || []) logLine(act.from + c.at, 'exec', c.en, true);
   }
   const line = captionAt(t);
