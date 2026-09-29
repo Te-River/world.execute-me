@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>art direction — three candidates</title>
+<style>
+  body { margin: 0; background: #08090b; color: #9aa3ad; font: 12px/1.5 ui-monospace, Consolas, monospace; }
+  h1 { font-size: 13px; font-weight: 500; letter-spacing: .2em; margin: 22px 0 4px; padding: 0 22px; color: #cfd6dd; }
+  p  { margin: 0 0 10px; padding: 0 22px; color: #6d757e; max-width: 78ch; }
+  canvas { display: block; width: calc(100% - 44px); margin: 0 22px 26px; aspect-ratio: 16 / 9; background: #000; }
+</style>
+</head>
+<body>
+<h1>A — THE SCREEN IS THE ONLY LIGHT</h1>
+<p>The room is dark; the page is what lights it. Everything is silhouette and falloff, one cold source, dust in the beam. Canvas is good at light and bad at cartoon, so this stops asking it to draw objects.</p>
+<canvas id="a" width="1600" height="900"></canvas>
+
+<h1>B — ONE SHAPE, ONE RED, ALL AIR</h1>
+<p>Title-sequence grammar (Saul Bass, the same Western tradition the song is written in): a matte field, one precise form, huge negative space, crimson as the only saturation. Directly answers "too many things on screen".</p>
+<canvas id="b" width="1600" height="900"></canvas>
+
+<h1>C — DEEP FIELD, BIOLUMINESCENT</h1>
+<p>An intelligence suspended in fluid: a long tonal ramp, soft bloom, drifting particulate, a figure with no floor under it. The most atmospheric and the least specific to this song.</p>
+<canvas id="c" width="1600" height="900"></canvas>
+
+<script>
+/* ---- shared helpers ---- */
+const TAU = Math.PI * 2;
+function vignette(g, w, h, strength) {
+  const v = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.22, w / 2, h / 2, Math.max(w, h) * 0.72);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${strength})`);
+  g.fillStyle = v; g.fillRect(0, 0, w, h);
+}
+function grain(g, w, h, alpha) {
+  const n = document.createElement('canvas'); n.width = n.height = 160;
+  const c = n.getContext('2d'), im = c.createImageData(160, 160);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const v = 128 + ((Math.random() * 2 - 1) * 60) | 0;
+    im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255;
+  }
+  c.putImageData(im, 0, 0);
+  g.save(); g.globalAlpha = alpha; g.globalCompositeOperation = 'overlay';
+  g.fillStyle = g.createPattern(n, 'repeat'); g.fillRect(0, 0, w, h); g.restore();
+}
+/* a standing silhouette, lit from one side */
+function figure(g, x, y, s, body, rim, rimSide) {
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.fillStyle = body; g.strokeStyle = body; g.lineCap = 'round'; g.lineWidth = 8;
+  g.beginPath(); g.moveTo(-8, -46); g.lineTo(-9, -2); g.moveTo(8, -46); g.lineTo(9, -2); g.stroke();
+  g.beginPath(); g.moveTo(-17, -104); g.lineTo(17, -104); g.lineTo(24, -46); g.lineTo(-24, -46); g.closePath(); g.fill();
+  g.lineWidth = 10; g.beginPath(); g.moveTo(0, -101); g.lineTo(0, -113); g.stroke();
+  g.beginPath(); g.arc(0, -127, 15, 0, TAU); g.fill();
+  g.beginPath(); g.arc(0, -129, 18, Math.PI * 0.98, Math.PI * 2.02); g.fill();
+  if (rim) {
+    g.strokeStyle = rim; g.lineWidth = 2.6; g.beginPath();
+    g.moveTo(rimSide * -17, -104); g.lineTo(rimSide * -24, -46); g.lineTo(rimSide * -9, -2); g.stroke();
+    g.beginPath(); g.arc(0, -127, 15, rimSide > 0 ? Math.PI * 0.55 : Math.PI * 1.45, rimSide > 0 ? Math.PI * 1.45 : Math.PI * 0.55); g.stroke();
+  }
+  g.restore();
+}
+
+/* ================= A — the screen is the only light ================= */
+(() => {
+  const g = document.getElementById('a').getContext('2d'), W = 1600, H = 900;
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0a0d12'); bg.addColorStop(0.72, '#0d1117'); bg.addColorStop(1, '#141a21');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+  /* the far wall, just enough to stop the dark being empty */
+  const wall = g.createRadialGradient(620, 380, 0, 620, 380, 900);
+  wall.addColorStop(0, 'rgba(120,150,185,.16)'); wall.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = wall; g.fillRect(0, 0, W, H);
+
+  const PX = 300, PY = 176, PW = 620, PH = 470;      /* the sheet of paper / the page */
+
+  /* its light, thrown across the room */
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const beam = g.createRadialGradient(PX + PW / 2, PY + PH / 2, 40, PX + PW / 2, PY + PH / 2, 880);
+  beam.addColorStop(0, 'rgba(168,196,226,.20)'); beam.addColorStop(0.45, 'rgba(120,150,190,.06)');
+  beam.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = beam; g.fillRect(0, 0, W, H);
+  g.restore();
+
+  /* the page itself, with a soft cast shadow behind it */
+  g.save(); g.filter = 'blur(26px)'; g.fillStyle = 'rgba(190,214,238,.5)';
+  g.fillRect(PX - 26, PY - 18, PW + 52, PH + 40); g.restore();
+  const pg = g.createLinearGradient(PX, PY, PX + PW * 0.35, PY + PH);
+  pg.addColorStop(0, '#f2f5f8'); pg.addColorStop(1, '#c3cedb');
+  g.fillStyle = pg; g.fillRect(PX, PY, PW, PH);
+  g.fillStyle = 'rgba(168,31,56,.85)'; g.fillRect(PX, PY, 3, PH);          /* the margin rule */
+
+  /* lines of a program, read as light-bars rather than as text */
+  const lines = [[.10,.62],[.16,.34],[.24,.72],[.31,.48],[.38,.58],[.45,.26],[.53,.66],[.60,.42],[.69,.20],[.76,.74],[.83,.38]];
+  lines.forEach((l, i) => {
+    g.fillStyle = i === 9 ? 'rgba(168,31,56,.9)' : 'rgba(28,40,54,.62)';
+    g.fillRect(PX + 34, PY + PH * l[0], PW * l[1] * 0.86, 7);
+  });
+  g.fillStyle = 'rgba(28,40,54,.30)'; g.fillRect(PX + 34, PY + PH * .93, PW * .3, 7);
+
+  /* the desk, and the page's reflection on it */
+  const desk = g.createLinearGradient(0, PY + PH + 120, 0, H);
+  desk.addColorStop(0, 'rgba(150,178,208,.10)'); desk.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = desk; g.fillRect(0, PY + PH + 120, W, H);
+  g.strokeStyle = 'rgba(150,178,208,.14)'; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(0, PY + PH + 122); g.lineTo(W, PY + PH + 122); g.stroke();
+
+  /* dust in the beam, denser near the light */
+  for (let i = 0; i < 260; i++) {
+    const a = Math.random() * TAU, r = Math.pow(Math.random(), 0.6) * 820;
+    const x = PX + PW / 2 + Math.cos(a) * r, y = PY + PH / 2 + Math.sin(a) * r * 0.62;
+    const near = 1 - Math.min(1, r / 820);
+    g.fillStyle = `rgba(226,238,250,${(0.05 + near * 0.4) * Math.random()})`;
+    g.beginPath(); g.arc(x, y, 0.7 + near * 1.9, 0, TAU); g.fill();
+  }
+
+  /* she is only lit on the side that faces the screen */
+  figure(g, 1180, 762, 1.62, '#05080c', 'rgba(206,226,246,.5)', -1);
+  g.fillStyle = 'rgba(0,0,0,.5)'; g.beginPath();
+  g.ellipse(1180, 766, 96, 12, 0, 0, TAU); g.fill();
+
+  vignette(g, W, H, 0.86); grain(g, W, H, 0.05);
+  g.fillStyle = 'rgba(214,228,242,.34)'; g.font = '300 26px ui-monospace, Consolas, monospace';
+  g.fillText('world.execute(me);', 300, 116);
+})();
+
+/* ================= B — one shape, one red, all air ================= */
+(() => {
+  const g = document.getElementById('b').getContext('2d'), W = 1600, H = 900;
+  g.fillStyle = '#12100f'; g.fillRect(0, 0, W, H);
+  const wash = g.createLinearGradient(0, 0, W, H);
+  wash.addColorStop(0, 'rgba(58,50,44,.5)'); wash.addColorStop(1, 'rgba(14,12,11,0)');
+  g.fillStyle = wash; g.fillRect(0, 0, W, H);
+
+  /* the circle: two fields, one cut. Nothing else competes. */
+  const cx = 560, cy = 430, r = 236;
+  g.fillStyle = '#e9e3d6'; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+  g.fillStyle = '#b3263a'; g.beginPath();
+  g.moveTo(cx, cy); g.arc(cx, cy, r, -Math.PI * 0.5, Math.PI * 0.16); g.closePath(); g.fill();
+  g.fillStyle = '#12100f'; g.beginPath(); g.arc(cx, cy, r * 0.34, 0, TAU); g.fill();
+  g.strokeStyle = '#e9e3d6'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(cx - r - 70, cy); g.lineTo(cx - r - 14, cy); g.stroke();
+
+  /* the figure, flat and unlit — a shape in the same vocabulary */
+  g.save(); g.translate(1180, 640); g.scale(2.05, 2.05);
+  g.fillStyle = '#e9e3d6'; g.strokeStyle = '#e9e3d6'; g.lineCap = 'round'; g.lineWidth = 8;
+  g.beginPath(); g.moveTo(-8, -46); g.lineTo(-9, -2); g.moveTo(8, -46); g.lineTo(9, -2); g.stroke();
+  g.beginPath(); g.moveTo(-17, -104); g.lineTo(17, -104); g.lineTo(24, -46); g.lineTo(-24, -46); g.closePath(); g.fill();
+  g.lineWidth = 10; g.beginPath(); g.moveTo(0, -101); g.lineTo(0, -113); g.stroke();
+  g.beginPath(); g.arc(0, -127, 15, 0, TAU); g.fill();
+  g.restore();
+
+  g.fillStyle = '#b3263a'; g.fillRect(180, 792, 1240, 3);                   /* the rule */
+  g.fillStyle = 'rgba(233,227,214,.62)'; g.font = '300 24px ui-monospace, Consolas, monospace';
+  g.fillText('class me extends world', 180, 168);
+  g.fillStyle = 'rgba(179,38,58,.9)'; g.fillRect(180, 196, 3, 60);
+  vignette(g, W, H, 0.5); grain(g, W, H, 0.06);
+})();
+
+/* ================= C — deep field, bioluminescent ================= */
+(() => {
+  const g = document.getElementById('c').getContext('2d'), W = 1600, H = 900;
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#02060d'); bg.addColorStop(0.55, '#061524'); bg.addColorStop(1, '#020a12');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+  const lx = 700, ly = 430;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 5; i++) {
+    const rad = 90 + i * 150;
+    const gl = g.createRadialGradient(lx, ly, 0, lx, ly, rad);
+    gl.addColorStop(0, `rgba(120,220,225,${0.13 - i * 0.02})`); gl.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gl; g.beginPath(); g.arc(lx, ly, rad, 0, TAU); g.fill();
+  }
+  g.restore();
+  g.save(); g.filter = 'blur(14px)'; g.fillStyle = 'rgba(196,248,246,.85)';
+  g.beginPath(); g.arc(lx, ly, 34, 0, TAU); g.fill(); g.restore();
+
+  /* caustic rings, and a figure with no floor beneath it */
+  g.strokeStyle = 'rgba(140,214,222,.16)'; g.lineWidth = 1.4;
+  for (let i = 0; i < 7; i++) { g.beginPath(); g.ellipse(lx, ly + 210, 200 + i * 110, 34 + i * 15, 0, 0, TAU); g.stroke(); }
+  for (let i = 0; i < 320; i++) {
+    const x = Math.random() * W, y = Math.random() * H, d = Math.hypot(x - lx, y - ly);
+    g.fillStyle = `rgba(190,240,246,${Math.max(0, 0.5 - d / 1500) * Math.random()})`;
+    g.beginPath(); g.arc(x, y, Math.random() * 2.1, 0, TAU); g.fill();
+  }
+  figure(g, 1130, 700, 1.5, 'rgba(2,8,14,.94)', 'rgba(168,236,240,.42)', -1);
+  vignette(g, W, H, 0.8); grain(g, W, H, 0.05);
+})();
+</script>
+</body>
+</html>

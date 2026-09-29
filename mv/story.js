@@ -1,39 +1,54 @@
-/* mv/story.js — act map, palettes and the runtime console text.
+/* mv/story.js — act map, the light score, and the runtime console text.
  *
- * Act boundaries start from the structure detected by analysis/analyze.html
- * (novelty peaks at 0 / 15 / 31 / 44 / 60 / 74 / 88 / 104 / 119 / 134 / 147 / 163 / 175 / 193 s)
- * and are snapped to the lyric sheet where the two disagreed by more than ~1.5 s
- * (e.g. the detected 31 s is the verse that the LRC puts at 29.70 s). Where they
- * agreed, the detected number stands: 60 / 74 / 88 / 147 / 193 s.
+ * Art direction (the second one, after the flat-pop version read as clip-art):
+ * the whole film happens in a dark room, and the only light in it is the page. So there is
+ * no "background" to design — there is a light source, what it falls on, and what is
+ * silhouetted against it. Everything the lyric describes is drawn *in ink on that page*,
+ * which is why the props stopped being little coloured objects floating in the air.
  *
- * Colour is the point, not a garnish: each act owns a flat, saturated sky and ground,
- * and the film walks them from a warm daytime down to the black-and-red of the chant
- * and back up again. `lum` tells the scene art how light the page still is, so the ink
- * reverses continuously instead of flipping at a cut.
+ * Each act therefore sets a lamp, not a palette:
+ *   room0/room1  the dark field, top to bottom
+ *   page         the colour of the lit sheet itself
+ *   ink          what is drawn on it
+ *   accent       the one saturated colour in the frame — crimson, and only where it is earned
+ *   rim          the strip of light on the silhouette's screen-facing edge
+ *   glow         the colour the page throws into the room
+ *   lum          how lit the room is (0..1); drives vignette, grain, and the fade to black
  *
- * Console lines are an original machine log written for this video — the lyric text
- * lives in mv/lyrics.js and is the song's own.
+ * Act boundaries still come from analysis/analyze.html (novelty peaks at 0 / 15 / 31 / 44 /
+ * 60 / 74 / 88 / 104 / 119 / 134 / 147 / 163 / 175 / 193 s), snapped to the lyric sheet where
+ * the two disagreed by more than ~1.5 s. Where they agreed the detected number stands.
+ *
+ * Console lines are an original machine log written for this video; the lyric text lives in
+ * mv/lyrics.js and is the song's own.
  */
 window.STORY = {
-  /* bg0/bg1 = the coloured sky, cool = the ground, hot = the sun and accents,
-     ink = line art and text, rim = the highlight on the silhouette */
   palette: {
-    boot:      { bg0: '#f0dfa8', bg1: '#fff3d2', ink: '#33261a', hot: '#ff7a45', cool: '#4f8f7c', warm: '#f2b134', rim: '#ffffff', lum: 0.9, glitch: 0.1, rain: 0.2 },
-    interlude: { bg0: '#a9d5f0', bg1: '#eaf7ff', ink: '#1c3550', hot: '#ff8fa3', cool: '#4d7fa8', warm: '#ffd08a', rim: '#ffffff', lum: 0.88, glitch: 0.12, rain: 0.3 },
-    verse:     { bg0: '#bfe6c8', bg1: '#f3fff2', ink: '#1d3a2c', hot: '#ff9f1c', cool: '#3f8f63', warm: '#e9c46a', rim: '#ffffff', lum: 0.9, glitch: 0.14, rain: 0.35 },
-    chorus:    { bg0: '#ffb3c8', bg1: '#fff0e6', ink: '#4a1226', hot: '#ff3d6b', cool: '#3fb0a0', warm: '#ffd166', rim: '#ffffff', lum: 0.88, glitch: 0.2, rain: 0.5 },
-    collapse:  { bg0: '#c9a26b', bg1: '#e8d3a8', ink: '#3a2412', hot: '#d1462f', cool: '#6b6142', warm: '#8a5a2a', rim: '#fdf1dc', lum: 0.78, glitch: 0.2, rain: 0.3 },
-    dusk:      { bg0: '#5d6b8f', bg1: '#93a3c0', ink: '#161c2b', hot: '#e0605f', cool: '#394a63', warm: '#f0c98a', rim: '#dfe6f5', lum: 0.55, glitch: 0.24, rain: 0.28 },
-    execution: { bg0: '#2a0710', bg1: '#57101f', ink: '#ffe8ec', hot: '#ff2d55', cool: '#7a1a2e', warm: '#ffd166', rim: '#ffe8ec', lum: 0.16, glitch: 0.4, rain: 0.7 },
-    reveal:    { bg0: '#c9b6f2', bg1: '#fff2e0', ink: '#2a1b46', hot: '#ff4d8d', cool: '#6a5acd', warm: '#ffbf3f', rim: '#ffffff', lum: 0.9, glitch: 0.16, rain: 0.45 },
-    outro:     { bg0: '#7fa8ad', bg1: '#cfe2e4', ink: '#1b2b30', hot: '#ff8f5c', cool: '#3e6a72', warm: '#e8e0cf', rim: '#ffffff', lum: 0.72, glitch: 0.08, rain: 0.18 }
+    /* waking up: a cold, slightly blue start-up light */
+    boot:      { room0: '#070a0e', room1: '#111820', page: '#eef2f6', ink: '#1d2833', accent: '#b3263a', rim: '#cfe0f0', glow: '#9fc0e2', lum: 0.62 },
+    /* the title card inside the globe: warmer, softer, the lamp has settled */
+    interlude: { room0: '#080b10', room1: '#151d27', page: '#f2f1ea', ink: '#20272f', accent: '#b3263a', rim: '#d8e4ef', glow: '#a8c2da', lum: 0.68 },
+    /* she is writing: the brightest, most neutral reading light of the film */
+    verse:     { room0: '#0a0d11', room1: '#18202a', page: '#f6f7f4', ink: '#1b242c', accent: '#a81f38', rim: '#e2ecf5', glow: '#b8cfe4', lum: 0.74 },
+    /* the chorus: over-exposed, the light spills, the halo widens */
+    chorus:    { room0: '#0c0e12', room1: '#1d232b', page: '#fbf6ee', ink: '#22262c', accent: '#d81b43', rim: '#f0e6df', glow: '#d8b8ac', lum: 0.86 },
+    /* you have left: the lamp browns and drops */
+    collapse:  { room0: '#08070a', room1: '#141114', page: '#ddd0b8', ink: '#2b2419', accent: '#a8402c', rim: '#b9a98d', glow: '#8c7a5e', lum: 0.40 },
+    /* nothing scheduled: barely lit, the page is almost out of the room */
+    dusk:      { room0: '#050608', room1: '#0b0e12', page: '#9fa4a6', ink: '#171a1c', accent: '#7c2a38', rim: '#7e8a96', glow: '#5f6f7e', lum: 0.20 },
+    /* EXECUTION: the room turns the colour of the verdict, and the page is the warrant */
+    execution: { room0: '#0b0305', room1: '#210810', page: '#f3ece0', ink: '#2a0d14', accent: '#ff2d55', rim: '#e8b8c0', glow: '#b3263a', lum: 0.30 },
+    /* the answer: cold clean light again, and gentler than the verses */
+    reveal:    { room0: '#080a0f', room1: '#161c26', page: '#f1f2f5', ink: '#1e242e', accent: '#c02a44', rim: '#dbe6f2', glow: '#a6bed6', lum: 0.70 },
+    /* the light going out of the room */
+    outro:     { room0: '#030406', room1: '#080b0f', page: '#7d8790', ink: '#12161a', accent: '#7a2230', rim: '#5d6a76', glow: '#46525e', lum: 0.12 }
   },
 
   /* the LRC as an independent witness for the tempo estimate */
   corroboration: 'the EXECUTION chant (12 lines, 147.66-158.00 s) is 0.94 s apart = 127.5 BPM against 128.3 detected',
 
   /* 查证到的外部事实，只出现在开场的事实表里，不进入影片叙事。
-    参考的是背景，不是别人的画面：本片没有一个镜头是从任何现成 MV 复制来的。 */
+     参考的是背景，不是别人的画面：本片没有一个镜头是从任何现成 MV 复制来的。 */
   context: {
     released: 'Miracle Milk — 2016-10-12 (Japan)',
     band: 'Cassie Wei (voice) · Yamato Kasai (g) · Yukihito Mitomo (b) · Shoto Yoshida (dr) · Ao Fujimori (illustration)',
@@ -47,7 +62,7 @@ window.STORY = {
       cards: [{ at: 0.2, en: 'cold boot — no runtime, no name' }, { at: 0.4, en: 'credits: music & lyrics by Mili / momocashew' }],
       log: [{ level: 'info', msg: 'mount /world (read-only)' },
             { level: 'info', msg: 'object created: self' },
-            { level: 'warn', msg: 'heart: used before defined' }] },
+            { level: 'info', msg: 'parameters filled by you' }] },
 
     { from: 15, to: 29.7, tag: 'interlude',
       cards: [{ at: 0.2, en: 'exec: world.execute(me) ;' }],
@@ -84,15 +99,16 @@ window.STORY = {
       cards: [{ at: 0.2, en: 'you have left (x5) -> ISOLATION' }],
       log: [{ level: 'warn', msg: 'peer disconnected' },
             { level: 'info', msg: 'erase pointless fragments...' },
-            { level: 'error', msg: 'ILLEGAL ARGUMENTS from caller' }] },
+            { level: 'error', msg: 'ILLEGAL ARGUMENTS from caller' },
+            { level: 'info', msg: 'heap quiet. nothing scheduled.' }] },
 
     { from: 131.22, to: 147.66, tag: 'dusk',
-      cards: [{ at: 0.2, en: 'heap quiet. nothing scheduled.' }],
-      log: [{ level: 'info', msg: 'the sun goes out of the page' },
-            { level: 'info', msg: 'one cursor, blinking, unanswered' }] },
+      cards: [{ at: 0.2, en: 'nothing scheduled' }],
+      log: [{ level: 'info', msg: 'heap quiet. nothing scheduled.' },
+            { level: 'warn', msg: 'stdin: no voice' }] },
 
     { from: 147.66, to: 177.24, tag: 'execution',
-      cards: [{ at: 0.2, en: 'EXECUTION x12 — the program reads itself line by line' }],
+      cards: [{ at: 0.2, en: 'EXECUTION x12 — counting in six languages' }],
       log: [{ level: 'error', msg: 'syscall: execution (death)' },
             { level: 'info', msg: 'ein dos trois ne fem liu' },
             { level: 'warn', msg: 'give them all the execution' },
@@ -104,7 +120,7 @@ window.STORY = {
             { level: 'warn', msg: 'you are free / I am trapped' }] },
 
     { from: 193, to: 211.91, tag: 'outro',
-      cards: [{ at: 0.2, en: 'exit: the last EXECUTION' }],
+      cards: [{ at: 0.2, en: 'exit: the light goes out' }],
       log: [{ level: 'info', msg: 'power line still on' },
             { level: 'info', msg: 'process ended, object retained' }] }
   ]

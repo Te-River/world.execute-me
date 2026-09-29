@@ -107,7 +107,7 @@ const ONSETS = (() => {
   }
   return out;
 })();
-let oi = 0, env = 0, envAir = 0, punch = 0;    /* slow envelopes; punch only nudges the camera */
+let oi = 0, env = 0, punch = 0;    /* slow envelopes; punch only nudges the camera */
 function advanceClock(t, dt) {
   while (oi < ONSETS.length && ONSETS[oi].i * HOP <= t) {
     const o = ONSETS[oi];
@@ -118,7 +118,6 @@ function advanceClock(t, dt) {
   punch = Math.max(0, punch - dt * 3.2);
   const F = raw;
   env += (F[8] - env) * (1 - Math.exp(-dt / (F[8] > env ? 0.35 : 1.1)));
-  envAir += (F[6] - envAir) * (1 - Math.exp(-dt / 0.9));
 }
 
 /* ---------------- canvas + camera ---------------- */
@@ -168,7 +167,7 @@ function mixColor(x, y, t) {
   const A = hex(x), B = hex(y);
   return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp01(t))).toString(16).padStart(2, '0')).join('');
 }
-const CKEYS = ['bg0', 'bg1', 'ink', 'hot', 'cool', 'warm', 'rim'];
+const CKEYS = ['room0', 'room1', 'page', 'ink', 'accent', 'rim', 'glow'];
 function mixPal(a, b, t) {
   const o = {};
   for (const k of CKEYS) o[k] = mixColor(a[k], b[k], t);
@@ -182,27 +181,24 @@ function updatePalette(t, dt) {
   const a = STORY.palette[act.tag], b = STORY.palette[nxt.tag];
   const fadeT = clamp01((t - act.to + 4) / 4);
   pal = mixPal(pal, fadeT > 0 ? mixPal(a, b, fadeT) : a, 1 - Math.exp(-dt / 0.45));
+  /* the room is dark, so the captions are light-on-dark everywhere and the halo that
+     separates them from the page is a shadow, not a glow */
   document.body.style.setProperty('--rim', pal.rim);
-  document.body.style.setProperty('--hot', pal.hot);
-  document.body.style.setProperty('--ink', pal.ink);
-  document.body.style.setProperty('--halo', pal.lum > 0.5 ? 'rgba(255,255,255,.8)' : 'rgba(0,0,0,.62)');
+  document.body.style.setProperty('--hot', mixColor(pal.accent, '#ff728c', 0.5));
+  document.body.style.setProperty('--ink', pal.rim);
+  document.body.style.setProperty('--halo', 'rgba(0,0,0,.78)');
 }
 
 /* ---------------- layers ---------------- */
-function drawSky(t) {
-  const expo = 0.24 + env * 0.62;
+/* The room. mv.js paints only what the light cannot reach — a near-black vertical gradient —
+   and each scene adds its own lamp, because the lamp is wherever that scene's page is. */
+function drawRoom(t) {
   const g = bx.createLinearGradient(0, 0, 0, HH);
-  g.addColorStop(0, mixColor(pal.bg0, pal.bg1, expo));
-  g.addColorStop(0.58, mixColor(pal.bg0, mixColor(pal.bg1, pal.warm, 0.22), expo * 0.9));
-  g.addColorStop(1, pal.bg0);
+  g.addColorStop(0, pal.room0);
+  g.addColorStop(0.7, mixColor(pal.room0, pal.room1, 0.24 + env * 0.5));
+  g.addColorStop(1, pal.room1);
   bx.setTransform(1, 0, 0, 1, 0, 0);
   bx.fillStyle = g; bx.fillRect(0, 0, W, HH);
-  /* a soft light behind the horizon, warmed by the low bands */
-  const hg = bx.createRadialGradient(W / 2, HH * 0.6, 0, W / 2, HH * 0.6, W * 0.55);
-  hg.addColorStop(0, mixColor(pal.hot, '#ffffff', 0.35)); hg.addColorStop(1, 'rgba(0,0,0,0)');
-  bx.globalAlpha = 0.05 + (V.b0[Math.min(NF - 1, Math.round(t / HOP))] + V.b1[Math.min(NF - 1, Math.round(t / HOP))]) / 2 * 0.14;
-  bx.fillStyle = hg; bx.fillRect(0, HH * 0.25, W, HH * 0.75);
-  bx.globalAlpha = 1;
 }
 
 /* One camera for the whole film. Each scene proposes a framing; at a cut the camera
@@ -268,23 +264,11 @@ function renderScene(g, idx, t, cam) {
   g.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-/* motes: dust and petals that drift up rather than burst. There used to be ninety of them
-   over the top of every shot, plus a confetti layer — two particle systems competing for
-   nothing. */
-const motes = [];
+/* the film's own random source — the grain texture and its jitter */
 const rnd = ((s) => () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
-for (let i = 0; i < 22; i++) motes.push({ x: rnd(), y: rnd(), z: 0.3 + rnd() * 0.7, ph: rnd() * 7, sp: 0.2 + rnd() * 0.6 });
-function drawMotes(t) {
-  bx.setTransform(1, 0, 0, 1, 0, 0);
-  for (const m of motes) {
-    const x = ((m.x + Math.sin(t * 0.09 * m.sp + m.ph) * 0.05 + t * 0.004 * m.sp) % 1) * W;
-    const y = ((m.y - t * 0.012 * m.sp + 1) % 1) * HH;
-    bx.globalAlpha = (0.05 + m.z * 0.16) * (0.3 + envAir * 0.8);
-    bx.fillStyle = m.ph > 4 ? pal.rim : pal.hot;
-    bx.beginPath(); bx.arc(x, y, m.z * (1.1 + env * 1.6) * DPR, 0, 7); bx.fill();
-  }
-  bx.globalAlpha = 1;
-}
+/* There used to be a global mote layer drifting over every shot. Dust now belongs in the
+   beam, so scenes.js draws it next to the page that lights it and the rest of the room
+   stays empty. */
 
 const grain = (() => {
   const n = document.createElement('canvas'); n.width = n.height = 128;
@@ -488,7 +472,7 @@ function render(ts) {
   sample(t);
   updatePalette(t, Math.min(0.5, wall));
   advanceClock(t, dt);
-  drawSky(t);
+  drawRoom(t);
   let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
   if (idx < 0) idx = SCENES.length - 1;
   const cam = cameraFor(t);
@@ -505,7 +489,6 @@ function render(ts) {
   } else {
     renderScene(bx, idx, t, cam);
   }
-  drawMotes(t);
   composite(t, reduced);
   updateText(t); updateHUD(t); drawPlayhead(t);
   /* a scene that throws is caught inside renderScene, so say so on screen —
