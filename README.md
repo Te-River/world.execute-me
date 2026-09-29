@@ -210,6 +210,10 @@ DISHEARTENED 处错放了 ILLEGAL ARGUMENTS 对话框（早 6.3 秒）、INITIAL
 `rotate(NaN)` 让 CTM 不可逆，于是**彩纸一直没画出来**——它只在画面上表现为"少了点东西"，
 代码层面完全看不出来。
 
+一处交代：接触表与上面这组数字来自"修完 NF 与 slew 之后"的那一次全扫；之后我又改了两个小地方
+（`switches` 补纸纹、结尾的窗补窗格），它们**只经过 `spot-check.jpg` 的全尺寸定点复核，没有重扫全片**。
+`analysis/spot-check.jpg` 就是那六张定点图（99 / 101 / 150 / 160 / 200 / 206 秒）。
+
 跑法（需要一个支持 Range 且能收 POST 的本地服务，因为 `python -m http.server` 不支持
 byte-range，音频 seek 会失败；而 hidden 页面的截图可能返回陈旧合成帧，所以图是页面
 自己 POST 出来的）：
