@@ -11,6 +11,8 @@
  *   dif  mean |delta| vs the previous frame — the symptom of motion, including any motion
  *        nobody asked for. This is how "去掉无意义的抖动" gets checked instead of argued.
  *   pan  |camera x delta| + |camera y delta| — the cause-level readout of the same thing
+ *   det  mean absolute gradient of luma inside the frame — how busy the picture is. Added
+ *        for "整个画面太乱了": clutter stopped being an opinion once it had a number.
  *
  * Note on resolution: the analysis data is 21.3 ms per frame (46.9 fps), so at 60 fps some
  * frames differ only by interpolation. 60 fps is still the right sampling rate — it is the
@@ -56,11 +58,12 @@ function start() {
   const rc = document.createElement('canvas'); rc.width = RW; rc.height = RH;
   const rg = rc.getContext('2d', { willReadFrequently: true });
   const prev = new Float32Array(RW * RH * 3);
+  const luma = new Float32Array(RW * RH);
   const secs = Math.ceil(DUR);
 
   S = {
     N, DUR, n: 0, done: false, t0: performance.now(), flags: [],
-    lum: new Uint8Array(N), sat: new Uint8Array(N), dif: new Uint8Array(N),
+    lum: new Uint8Array(N), sat: new Uint8Array(N), dif: new Uint8Array(N), det: new Uint8Array(N),
     pdx: new Uint8Array(N), pdy: new Uint8Array(N), cz: new Float32Array(N),
     sheetA: sheet(Math.min(14, Math.ceil(106 / COLS))), sheetB: sheet(14)
   };
@@ -89,30 +92,44 @@ function start() {
     rg.drawImage(stage, ox, oy, dw, dh, 0, 0, RW, RH);
     const im = rg.getImageData(0, 0, RW, RH).data;
     let lum = 0, sat = 0, dif = 0;
-    for (let i = 0, p = 0; i < im.length; i += 4, p += 3) {
+    for (let i = 0, p = 0, k = 0; i < im.length; i += 4, p += 3, k++) {
       const r = im[i], g2 = im[i + 1], b = im[i + 2];
       const mx = Math.max(r, g2, b), mn = Math.min(r, g2, b);
       lum += mx;
       sat += mx ? (mx - mn) / mx * 255 : 0;
       dif += Math.abs(r - prev[p]) + Math.abs(g2 - prev[p + 1]) + Math.abs(b - prev[p + 2]);
       prev[p] = r; prev[p + 1] = g2; prev[p + 2] = b;
+      luma[k] = r * 0.299 + g2 * 0.587 + b * 0.114;
+    }
+    let grad = 0, gn = 0;
+    for (let y = 0; y < RH; y++) {
+      for (let x = 0; x < RW - 1; x++) { grad += Math.abs(luma[y * RW + x + 1] - luma[y * RW + x]); gn++; }
+    }
+    for (let y = 0; y < RH - 1; y++) {
+      for (let x = 0; x < RW; x++) { grad += Math.abs(luma[(y + 1) * RW + x] - luma[y * RW + x]); gn++; }
     }
     const npx = im.length / 4;
     S.lum[f] = Math.round(lum / npx);
     S.sat[f] = Math.round(sat / npx);
     S.dif[f] = Math.min(255, Math.round(dif / npx / 3));
+    S.det[f] = Math.min(255, Math.round(grad / gn * 8));
     const k = Math.floor(t);
     if (f % FPS === 0 && k < secs) cell(k < 106 ? S.sheetA : S.sheetB, k < 106 ? k : k - 106, k);
   }
 
   let f = 0;
   const ch = new MessageChannel();
+  /* A message port per frame keeps the sweep fast but can starve every other task source:
+     once the frames got cheap enough to draw in ~2 ms, the page stopped answering the
+     console. Every YIELD frames, hand off through a timer so the tab stays usable. */
+  const YIELD = 600;
   ch.port1.onmessage = () => {
     try { frame(f); }
     catch (e) { S.flags.push([f, 'threw', e.message]); }
     f++; S.n = f;
     if (f >= S.N) { S.done = true; return; }
-    ch.port2.postMessage(0);            // a task per frame, so the console stays usable
+    if (f % YIELD === 0) setTimeout(() => ch.port2.postMessage(0), 0);
+    else ch.port2.postMessage(0);
   };
   ch.port2.postMessage(0);
   return { frames: N, fps: FPS, seconds: +DUR.toFixed(2) };
@@ -136,16 +153,17 @@ function stats() {
   flags.sort((a, b) => a[0] - b[0]);
   const perAct = ACTS.map((a) => {
     const f0 = Math.round(a.from * FPS), f1 = Math.min(N, Math.round(a.to * FPS));
-    let dm = 0, dp = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255;
+    let dm = 0, dp = 0, dt = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255;
     const ds = [];
     for (let f = f0; f < f1; f++) {
-      ds.push(S.dif[f]); dm += S.dif[f]; dp += S.pdx[f] + S.pdy[f];
+      ds.push(S.dif[f]); dm += S.dif[f]; dp += S.pdx[f] + S.pdy[f]; dt += S.det[f];
       dmax = Math.max(dmax, S.dif[f]); pmax = Math.max(pmax, S.pdx[f] + S.pdy[f]);
       lmin = Math.min(lmin, S.lum[f]); smin = Math.min(smin, S.sat[f]); n++;
     }
     ds.sort((x, y) => x - y);
     return { act: a.tag, from: a.from, frames: n,
              motion: +(dm / n).toFixed(1), motionP95: ds[Math.floor(n * 0.95)], motionMax: dmax,
+             detail: +(dt / n).toFixed(1),
              pan: +(dp / n).toFixed(1), panMax: pmax, minLum: lmin, minSat: smin };
   });
   return { flags, perAct };
@@ -160,7 +178,8 @@ function chart(W, H) {
     ['luminance  0-255', (f) => S.lum[f], '#8ab4f8'],
     ['saturation  0-255', (f) => S.sat[f], '#f38ba8'],
     ['frame-to-frame motion', (f) => S.dif[f], '#a6e3a1'],
-    ['camera pan rate', (f) => Math.min(255, S.pdx[f] + S.pdy[f]), '#ffd166']
+    ['camera pan rate', (f) => Math.min(255, S.pdx[f] + S.pdy[f]), '#ffd166'],
+    ['detail  (how busy the frame is)', (f) => S.det[f], '#cdd6f4']
   ];
   const PW = W - 70, HH = 128;
   strips.forEach((s, si) => {
@@ -207,7 +226,7 @@ async function post(name, canvas, type, q) {
 async function report() {
   const { flags, perAct } = stats();
   const sizes = {
-    'verify-60fps.png': await post('verify-60fps.png', chart(1600, 640), 'image/png'),
+    'verify-60fps.png': await post('verify-60fps.png', chart(1600, 800), 'image/png'),
     'sheet-a.jpg': await post('sheet-a.jpg', S.sheetA, 'image/jpeg', 0.86),
     'sheet-b.jpg': await post('sheet-b.jpg', S.sheetB, 'image/jpeg', 0.86)
   };
@@ -219,8 +238,7 @@ async function report() {
    (attack noise: the kit, the consonants, the chiptune edge), the median spectral flatness
    (tonal vs noisy), the median centroid, and how much of the span carries a pitch at all.
    Asked because the band's own description — electronica, classical, game music, YMO —
-   predicts two contrasting textures, and the picture should not pretend it is one thing. */
-function timbre(step) {
+   predicts two contrasting textures, and the picture should not pretend it is one thing. */function timbre(step) {
   const S = window.SCORE, M = S.meta, HOP = M.hopMs / 1000;
   const dec = (s) => { const x = atob(s), u = new Uint8Array(x.length); for (let i = 0; i < x.length; i++) u[i] = x.charCodeAt(i); return u; };
   const B = [];

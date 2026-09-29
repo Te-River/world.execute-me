@@ -214,57 +214,39 @@ const tint = (a, b, t) => {
   return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(t))).toString(16).padStart(2, '0')).join('');
 };
 const env0 = (F) => (F[0] + F[1] + F[2]) / 3;
-/* the page: a coloured sky (painted by mv.js), a flat ground, two tinted ridges,
-   a saturated sun, and a printed grid knocked out in white. */
+/* the page: a coloured sky (painted by mv.js), a flat ground, a town on the horizon, a
+   saturated sun, and — only where something is being written on the page — a printed grid.
+   The rolling ridge that used to sit under the town is gone: ground + ridge + houses +
+   horizon line were four silhouettes in the same 100-pixel band, in every wide shot of the
+   film, which is most of what made the bottom third read as busy. */
 function sheet(g, col, t, F, o) {
   o = o || {};
   if (col.ink) INK = col.ink;                      /* the page's ink, continuous across acts */
   const hy = o.hy || DH * 0.62;
-  const deep = tint(col.cool, '#000000', 0.22);
-  const pale = tint(col.cool, '#ffffff', 0.35);
   if (o.horizon !== false) {
     g.fillStyle = col.cool; g.fillRect(-80, hy, DW + 160, DH - hy + 80);
-    const ridge = (yb, amp, ph, tone) => {
-      g.fillStyle = tone; g.beginPath(); g.moveTo(-80, DH + 40);
-      for (let x = -80; x <= DW + 80; x += 22) {
-        const n = Math.sin(x * 0.004 + ph) * 0.6 + Math.sin(x * 0.011 + ph * 1.7) * 0.4;
-        g.lineTo(x, yb - (0.5 + n * 0.5) * amp);
+    if (o.town !== false) {
+      /* the town: the snowbound world of NEKODAY, sitting on the horizon line */
+      g.fillStyle = tint(col.cool, '#000000', 0.52);
+      for (let i = 0; i < 8; i++) {
+        const x = 90 + i * 200 + ((i * 37) % 46), w = 48 + ((i * 23) % 30), hh = 24 + ((i * 31) % 38);
+        g.beginPath();
+        g.moveTo(x, hy + 6); g.lineTo(x, hy - hh);
+        g.lineTo(x + w / 2, hy - hh - 14); g.lineTo(x + w, hy - hh); g.lineTo(x + w, hy + 6);
+        g.closePath(); g.fill();
       }
-      g.lineTo(DW + 80, DH + 40); g.closePath(); g.fill();
-    };
-    ridge(hy + 4, 132, 1.2, pale);
-    ridge(hy + 26, 74, 3.4, deep);
-    /* the town: the snowbound world of NEKODAY, sitting on the horizon line */
-    g.fillStyle = tint(col.cool, '#000000', 0.52);
-    for (let i = 0; i < 14; i++) {
-      const x = 40 + i * 112 + ((i * 37) % 40), w = 44 + ((i * 23) % 34), hh = 22 + ((i * 31) % 40);
-      g.beginPath();
-      g.moveTo(x, hy + 6); g.lineTo(x, hy - hh);
-      g.lineTo(x + w / 2, hy - hh - 14); g.lineTo(x + w, hy - hh); g.lineTo(x + w, hy + 6);
-      g.closePath(); g.fill();
-      if (i % 3 === 0) g.fillRect(x + w * 0.35, hy - hh * 0.6, 7, 7);          // one lit window
-    }
-    g.strokeStyle = tint(col.cool, '#000000', 0.62); g.lineWidth = 3;
-    for (let i = 0; i < 5; i++) {                                              // telephone poles and wires
-      const x = 160 + i * 320;
-      G.line(g, x, hy + 6, x, hy - 74); G.line(g, x - 16, hy - 60, x + 16, hy - 60);
-      if (i) G.poly(g, [[x - 320, hy - 60], [x - 160, hy - 40], [x, hy - 60]], false);
     }
     g.strokeStyle = tint(col.cool, '#000000', 0.45); g.lineWidth = 2.6;
     G.line(g, -80, hy + 4, DW + 80, hy + 4);
     if (o.sun !== false) {
       g.fillStyle = col.hot;
       g.beginPath(); g.arc(DW * 0.5, hy - 152, 96 + env0(F) * 34, 0, TAU); g.fill();
-      g.globalAlpha = 0.35; g.strokeStyle = col.hot; g.lineWidth = 3;
-      G.circle(g, DW * 0.5, hy - 152, 140 + env0(F) * 44);
-      g.globalAlpha = 1;
     }
   }
-  /* the printed grid and the board are knocked out in white over the colour */
-  if (o.grid !== 0) {
+  if (o.grid) {
     g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.globalAlpha = 0.13;
-    for (let x = 0; x <= DW; x += 80) G.line(g, x, 0, x, DH);
-    for (let y = 0; y <= DH; y += 80) G.line(g, 0, y, DW, y);
+    for (let x = 0; x <= DW; x += 120) G.line(g, x, 0, x, DH);
+    for (let y = 0; y <= DH; y += 120) G.line(g, 0, y, DW, y);
     g.globalAlpha = 1;
   }
   if (o.board) {
@@ -285,7 +267,7 @@ function confetti(g, t, F, n, col) {
     window.__flakes = Array.from({ length: 240 }, () => ({ x: r(), y: r(), z: 0.3 + r() * 0.7, d: r() }));
   }
   const cols = [col.hot, GOLD, MINT, BLUE];
-  for (let i = 0; i < Math.min(n, window.__flakes.length); i++) {
+  for (let i = 0; i < Math.min(n * 0.5, window.__flakes.length); i++) {
     const f = window.__flakes[i];
     const y = ((f.y + t * 0.05 * f.z) % 1) * DH, x = (f.x + Math.sin(t * 1.1 + f.d * 9) * 0.03) * DW;
     g.fillStyle = cols[i % 4]; g.globalAlpha = (0.25 + f.z * 0.5) * (0.35 + F[6] * 0.7);
@@ -298,7 +280,7 @@ function confetti(g, t, F, n, col) {
 function snow(g, t, F, n, col) {
   if (!window.__flakes) confetti(g, 0, F, 0, col);
   g.fillStyle = col.ink;
-  for (let i = 0; i < Math.min(n, window.__flakes.length); i++) {
+  for (let i = 0; i < Math.min(n * 0.5, window.__flakes.length); i++) {
     const f = window.__flakes[i];
     const y = ((f.y + t * 0.03 * f.z) % 1) * DH, x = (f.x + Math.sin(t * 0.5 + f.d * 9) * 0.02) * DW;
     g.globalAlpha = (0.08 + f.z * 0.35) * (0.3 + F[6] * 0.7);
@@ -564,7 +546,7 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
 S.push({ id: 'chorus1', from: 59.22, to: 74.04,
   frame: (k) => ({ z: 1.12 - k * 0.08, x: DW * (0.55 - k * 0.05), y: DH * (0.5 - k * 0.04) }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { board: true, stones: 14 });
+    sheet(g, col, t, F, { board: true, stones: 14, sun: false });
     confetti(g, t, F, 60, col);
     g.strokeStyle = INK; g.fillStyle = INK;
     G.figure(g, DW * 0.6, GY, 1.35, t > 70 ? 'reach' : 'stand', t, col.hot, F[8]);
@@ -660,7 +642,7 @@ S.push({ id: 'switches', from: 88.58, to: 110.9,
     : t < 103.48 ? { z: 1.1, x: DW * 0.5, y: DH * 0.44 }
     : { z: 1.0, x: DW * 0.5, y: DH * 0.46 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 1, board: false, hy: DH * 0.72, sun: false });
+    sheet(g, col, t, F, { board: false, hy: DH * 0.72, sun: false, town: false });
     const cx = DW * 0.5, cy = DH * 0.4;
     g.lineWidth = 3; g.strokeStyle = INK; g.fillStyle = INK;
     if (t < 92.01) {
@@ -818,7 +800,7 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
 S.push({ id: 'chant', from: 147.66, to: 155.20, shake: 1, cut: true,
   frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.12, x: DW * 0.5, y: DH * 0.38 } : { z: 1.0, x: DW * 0.5, y: DH * 0.44 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false });
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false, town: false });
     code(g, 10 + Math.min(7, Math.floor((t - 147.66) / 0.94)));
     g.fillStyle = INK; g.strokeStyle = col.rim;
     G.figure(g, DW * 0.83, GY, 1.2, t > 150.5 ? 'kneel' : 'stand', t, RED, F[8] * 0.5);
@@ -880,7 +862,7 @@ S.push({ id: 'give', from: 161.58, to: 169.82, shake: 1,
 S.push({ id: 'back', from: 169.82, to: 177.24,
   frame: (k) => ({ z: 1.08 - k * 0.08, x: DW * (0.5 + 0.04 * Math.sin(k * 4)), y: DH * (0.45 + k * 0.05) }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.66, sun: false });
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.66, sun: false, town: false });
     code(g, undefined, 18 - Math.round(k * 9));
     snow(g, t, F, 60, col);
     g.fillStyle = INK; g.strokeStyle = col.rim;

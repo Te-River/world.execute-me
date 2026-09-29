@@ -268,10 +268,12 @@ function renderScene(g, idx, t, cam) {
   g.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-/* motes: dust and petals that drift up rather than burst */
+/* motes: dust and petals that drift up rather than burst. There used to be ninety of them
+   over the top of every shot, plus a confetti layer — two particle systems competing for
+   nothing. */
 const motes = [];
 const rnd = ((s) => () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
-for (let i = 0; i < 90; i++) motes.push({ x: rnd(), y: rnd(), z: 0.3 + rnd() * 0.7, ph: rnd() * 7, sp: 0.2 + rnd() * 0.6 });
+for (let i = 0; i < 22; i++) motes.push({ x: rnd(), y: rnd(), z: 0.3 + rnd() * 0.7, ph: rnd() * 7, sp: 0.2 + rnd() * 0.6 });
 function drawMotes(t) {
   bx.setTransform(1, 0, 0, 1, 0, 0);
   for (const m of motes) {
@@ -309,7 +311,7 @@ function composite(t, reduced) {
     gx.clearRect(0, 0, glow.width, glow.height);
     gx.drawImage(buf, 0, 0, glow.width, glow.height);
     cx.globalCompositeOperation = 'lighter';
-    cx.globalAlpha = 0.1 + env * 0.2;
+    cx.globalAlpha = 0.07 + env * 0.13;
     cx.drawImage(glow, 0, 0, W, HH);
     cx.globalAlpha = 1;
     cx.globalCompositeOperation = 'source-over';
@@ -320,7 +322,7 @@ function composite(t, reduced) {
      analysis says this song alternates between a pitched, low-flatness body and bright,
      noise-like passages (flatness 18-25 under the verses, 43-73 at the chorus entries and
      the outro's chip arpeggio), so the film's own grain swells with the noise floor. */
-  cx.globalAlpha = 0.055 + raw[14] * 0.16;
+  cx.globalAlpha = 0.04 + raw[14] * 0.1;
   cx.translate(Math.floor(rnd() * 128) - 64, Math.floor(rnd() * 128) - 64);
   cx.fillStyle = grainPat; cx.fillRect(-64, -64, W + 128, HH + 128);
   cx.restore();
@@ -381,7 +383,7 @@ function logLine(at, level, msg, big) {
   const lv = document.createElement('span'); lv.className = 'lv'; lv.textContent = ' ' + level + ' ';
   row.append(ts, lv, document.createTextNode(' ' + msg));
   ui.log.prepend(row);
-  while (ui.log.children.length > 5) ui.log.lastChild.remove();
+  while (ui.log.children.length > 3) ui.log.lastChild.remove();
   requestAnimationFrame(() => row.classList.add('on'));
 }
 let lastLogT = -1e9, lastSlot = -1;
