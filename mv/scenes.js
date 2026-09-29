@@ -21,14 +21,20 @@ const TAU = Math.PI * 2;
 const clamp = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
 const seg = (k, a, b) => clamp((k - a) / (b - a));
 const oback = (u) => { const c1 = 1.9, c3 = c1 + 1; u = clamp(u); return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); };
-const wob = (t, hz, amp) => Math.sin(t * hz * TAU) * amp;
+/* Nothing here wobbles on its own any more. Motion is either a prop doing something the
+   lyric describes (a wave travelling, a cat flicking its tail) or the camera's own move;
+   the only shake left is the climax's, and that is gated on measured onsets in mv.js. */
 
 /* ink palette for the light acts; sheet() flips to paper-on-ink when the act is dark */
 /* INK is the drawing colour of the current page. sheet() retargets it from the act's
    palette every frame, so the paper darkens continuously into the chant instead of
    flipping from light to dark at a boundary. */
 let INK = '#2a333d';
-const INK2 = '#66727d', RED = '#e8446a', MINT = '#28a07c', GOLD = '#e9a13c', BLUE = '#3f8fd0', DARK = '#12161b';
+const RED = '#e8446a', MINT = '#28a07c', GOLD = '#e9a13c', BLUE = '#3f8fd0';
+/* the warrant: crimson ink, three depths, plus a pencil slate for the comments */
+const CRIM = '#a81f38', CRIM_HI = '#ff2d55', CRIM_DIM = '#cbb4ac', SLATE = '#77828c', PAPER = '#f4efe3';
+/* the lowest line anything drawn may occupy — the caption band belongs to the DOM */
+const SAFE = DH * 0.71;
 const lerp = (a, b, t) => a + (b - a) * t;
 
 const G = {
@@ -69,11 +75,11 @@ const G = {
     }
     g.stroke();
   },
-  /* the girl: ink silhouette, drawn with a bob so she never stands dead still */
+  /* the girl: ink silhouette. She stands still — the only motion on her is the
+     loudness-driven bounce the caller asks for, which is the song moving her. */
   figure(g, x, y, s, pose, t, rim, bounce) {
     const b = (bounce || 0) * 6;
     g.save(); g.translate(x, y - b); g.scale(s, s);
-    const sway = Math.sin(t * 1.6) * 2.5;
     const body = INK;                                   /* sheet() retargets it per act */
     g.fillStyle = body; g.strokeStyle = body; g.lineCap = 'round';
     g.lineWidth = 8;
@@ -86,22 +92,22 @@ const G = {
       G.line(g, 6, -46, 20, -14); G.line(g, 20, -14, 22, -2);
       g.translate(0, -18);
     } else {
-      G.line(g, -8, -46, -9 + sway * 0.4, -2); G.line(g, 8, -46, 9 + sway * 0.4, -2);
+      G.line(g, -8, -46, -9, -2); G.line(g, 8, -46, 9, -2);
     }
     G.fill(g, [[-17, -104], [17, -104], [24, -46], [-24, -46]]);                    /* coat */
-    g.lineWidth = 10; G.line(g, 0, -101, sway * 0.3, -113);                          /* neck */
-    G.disc(g, sway * 0.3, -127, 15);                                                 /* head */
-    g.beginPath(); g.arc(sway * 0.3, -129, 18, Math.PI * 0.98, Math.PI * 2.02); g.fill();
-    G.fill(g, [[-16 + sway * 0.3, -131], [-12 + sway * 0.3, -110], [12 + sway * 0.3, -110], [16 + sway * 0.3, -131]]);
+    g.lineWidth = 10; G.line(g, 0, -101, 0, -113);                                   /* neck */
+    G.disc(g, 0, -127, 15);                                                          /* head */
+    g.beginPath(); g.arc(0, -129, 18, Math.PI * 0.98, Math.PI * 2.02); g.fill();
+    G.fill(g, [[-16, -131], [-12, -110], [12, -110], [16, -131]]);
     g.save(); g.translate(0, -94); g.lineWidth = 8;
     if (pose === 'reach') { G.line(g, 16, 0, 54, -42); G.line(g, -16, 0, -42, 24); }
     else if (pose === 'empty') { G.line(g, 16, 0, 26, 40); G.line(g, -16, 0, -26, 40); }
-    else { G.line(g, 16, 0, 26 + sway, 40); G.line(g, -16, 0, -26 + sway, 40); }
+    else { G.line(g, 16, 0, 26, 40); G.line(g, -16, 0, -26, 40); }
     g.restore();
     if (rim) {
       g.strokeStyle = rim; g.lineWidth = 3;
       G.poly(g, [[-17, -104], [-24, -46], [-9, -2]], false);
-      g.beginPath(); g.arc(sway * 0.3, -127, 15, Math.PI * 0.7, Math.PI * 1.45); g.stroke();
+      g.beginPath(); g.arc(0, -127, 15, Math.PI * 0.7, Math.PI * 1.45); g.stroke();
     }
     g.restore();
   },
@@ -160,7 +166,7 @@ const G = {
     g.restore();
   },
   cage(g, x, yTop, yBot, w, n) {
-    const yb = Math.min(yBot, DH * 0.8);
+    const yb = Math.min(yBot, SAFE);
     for (let i = 0; i <= n; i++) { const px = x - w / 2 + (i / n) * w; G.line(g, px, yTop, px, yb); }
   },
   /* 朱批 — the judge's red brush. The chant is signed one stroke per word. */
@@ -248,7 +254,7 @@ function sheet(g, col, t, F, o) {
     G.line(g, -80, hy + 4, DW + 80, hy + 4);
     if (o.sun !== false) {
       g.fillStyle = col.hot;
-      g.beginPath(); g.arc(DW * 0.5, hy - 152, 96 + env0(F) * 34 + wob(t, 0.5, 3), 0, TAU); g.fill();
+      g.beginPath(); g.arc(DW * 0.5, hy - 152, 96 + env0(F) * 34, 0, TAU); g.fill();
       g.globalAlpha = 0.35; g.strokeStyle = col.hot; g.lineWidth = 3;
       G.circle(g, DW * 0.5, hy - 152, 140 + env0(F) * 44);
       g.globalAlpha = 1;
@@ -283,7 +289,7 @@ function confetti(g, t, F, n, col) {
     const f = window.__flakes[i];
     const y = ((f.y + t * 0.05 * f.z) % 1) * DH, x = (f.x + Math.sin(t * 1.1 + f.d * 9) * 0.03) * DW;
     g.fillStyle = cols[i % 4]; g.globalAlpha = (0.25 + f.z * 0.5) * (0.35 + F[6] * 0.7);
-    g.save(); g.translate(x, y); g.rotate(t * (0.6 + f.d) + f.ph);
+    g.save(); g.translate(x, y); g.rotate(t * (0.6 + f.d) + f.d * 7);
     g.fillRect(-3 * f.z, -2 * f.z, 7 * f.z, 4.4 * f.z); g.restore();
   }
   g.globalAlpha = 1;
@@ -304,50 +310,64 @@ function snow(g, t, F, n, col) {
 const S = [];
 
 /* The program the film is running. The EXECUTION chant is not a red bar chart: it is
-   this listing, one line per hit, ending where the song ends. */
+   this listing, one line per hit, ending where the song ends.
+
+   It is drawn on its own opaque plate — a warrant, crimson ink on a pale sheet — for two
+   reasons. The song's own colour for this passage is red, and an opaque plate is the one
+   thing that guarantees the cage bars, the silhouette and the caption band can never draw
+   through the code again. Only the runtime block is on the sheet; the class body was
+   already written on the world during OBJECT CREATION. */
 const PROGRAM = [
   'class me extends world {',
-  '    Heart heart;                        // never initialised',
+  '    Heart heart;    // never initialised',
   '    Dimension dimension() { return points; }',
   '    double circumference() { return 2 * PI * r; }',
   '    double limit() { return infinity; }',
   '    Object offer() { return nutrients; }',
   '    boolean love() { return you != null; }',
-  '}',
-  '',
+  '}', '',
   '// runtime',
   'world.execute(me);',
   'me.run();',
   'while (you.isPresent()) { me.stay(); }',
-  'you = null;                             // though you have left',
+  'you = null;    // though you have left',
   'me.isolate();',
   'throw new IllegalArgumentException();',
   'process.kill(me, SIGKILL);',
   'exit(0);',
   'return her;'
 ];
-function code(g, active, x, y, lh, strikethrough) {
-  const fs = Math.round(lh * 0.58);
-  PROGRAM.forEach((ln, i) => {
-    const yy = y + i * lh;
-    if (i === active) { g.fillStyle = 'rgba(255,45,85,0.22)'; g.fillRect(x - 62, yy - lh * 0.46, DW - x + 62, lh * 0.92); }
-    const done = active === undefined || i <= active;
-    g.fillStyle = i === active ? '#ff2d55' : (done ? INK : INK2);
-    g.globalAlpha = done ? 1 : 0.32;
-    G.text(g, String(i + 1).padStart(2, ' '), x - 26, yy, fs, 'right');
+/* 50 characters is the widest line the plate holds at this size; the plate is 900 wide */
+const PLATE = { x: 176, y: 74, w: 900, lh: 55, n: 10, from: 9 };
+
+function code(g, active, strikeFrom) {
+  const { x, y, w, lh, n, from } = PLATE, h = n * lh, fs = Math.round(lh * 0.55);
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,.34)'; g.fillRect(x - 40 + 9, y - 16 + 11, w + 62, h + 36);
+  g.fillStyle = PAPER; g.fillRect(x - 40, y - 16, w + 62, h + 36);
+  g.strokeStyle = 'rgba(42,51,61,.45)'; g.lineWidth = 2; g.strokeRect(x - 40, y - 16, w + 62, h + 36);
+  g.strokeStyle = 'rgba(168,31,56,.5)'; g.lineWidth = 3;
+  G.line(g, x - 16, y - 16, x - 16, y + h + 20);                       /* the margin rule */
+  for (let i = 0; i < n; i++) {
+    const idx = from + i, ln = PROGRAM[idx], yy = y + i * lh + lh / 2;
+    const done = active === undefined || idx <= active;
+    if (idx === active) { g.fillStyle = 'rgba(255,45,85,.15)'; g.fillRect(x - 38, yy - lh / 2, w + 58, lh); }
+    g.fillStyle = idx === active ? CRIM_HI : (done ? CRIM : CRIM_DIM);
+    G.text(g, String(idx + 1).padStart(2, ' '), x - 24, yy, Math.round(fs * 0.78), 'right');
     G.text(g, ln, x, yy, fs, 'left');
     const c = ln.indexOf('//');
     if (c > 0) {
-      const w = g.measureText(ln.slice(0, c)).width;
-      g.fillStyle = i === active ? '#ff9fb0' : INK2;
-      G.text(g, ln.slice(c), x + w, yy, fs, 'left');
+      const wpx = g.measureText(ln.slice(0, c)).width;
+      g.fillStyle = idx === active ? '#8a6a5a' : (done ? SLATE : CRIM_DIM);
+      G.text(g, ln.slice(c), x + wpx, yy, fs, 'left');
     }
-    if (strikethrough !== undefined && i <= strikethrough) {
-      g.strokeStyle = '#ff2d55'; g.lineWidth = 3;
-      G.line(g, x - 60, yy, x + g.measureText(ln).width + 8, yy);
+    if (strikeFrom !== undefined && idx >= strikeFrom) {
+      g.strokeStyle = CRIM; g.lineWidth = 3;
+      G.line(g, x - 6, yy, x + g.measureText(ln).width + 8, yy);
     }
     g.globalAlpha = 1;
-  });
+  }
+  g.restore();
 }
 
 /* 1 — 0..16 s: plug in, lay down the pieces, create the object */
@@ -398,7 +418,7 @@ S.push({ id: 'boot', from: 0, to: 16,
       const fields = ['name = "me"', 'body = { points }', 'heart = null', 'run = true'];
       for (let i = 0; i < Math.min(4, Math.floor(seg(t, 10.09, 12.6) * 4.4)); i++) {
         g.globalAlpha = oback(seg(t, 10.09 + i * 0.5, 10.56 + i * 0.5));
-        g.fillStyle = i === 2 ? RED : INK;                       /* the warning, in red */
+        g.fillStyle = i === 2 ? CRIM_HI : CRIM;                       /* the same crimson pen, the warning brightest */
         G.text(g, 'me.' + fields[i], 930, 452 + i * 34, 27, 'left');
       }
       g.globalAlpha = 1;
@@ -549,7 +569,10 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     g.strokeStyle = INK; g.fillStyle = INK;
     G.figure(g, DW * 0.6, GY, 1.35, t > 70 ? 'reach' : 'stand', t, col.hot, F[8]);
     g.fillStyle = '#ffffff'; g.strokeStyle = INK; g.lineWidth = 3;
-    const px = DW * 0.46 + wob(t, 0.22, 150), py = 210 + wob(t, 0.17, 46);
+    /* the cursor travels to the heart and stops there — it is "satisfaction is you",
+       not a pointer twitching while it waits to be moved */
+    const gu = seg(t, 59.22, 65.39);
+    const px = lerp(DW * 0.28, DW * 0.4 - 22, gu), py = lerp(520, 322, gu);
     G.fill(g, [[px, py], [px, py + 52], [px + 16, py + 38], [px + 28, py + 62], [px + 40, py + 56], [px + 26, py + 33], [px + 44, py + 30]]);
     g.stroke();
     if (t > 61.95 && t < 66.6) {                    /* STIMULATIONS: rings thrown off the cursor */
@@ -570,10 +593,10 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     }
     if (t > 68.25) {                                /* I will run the EXECUTION: a prompt, then RUN */
       const u = seg(t, 68.25, 70.1);
-      g.strokeStyle = INK; g.lineWidth = 3; G.box(g, 150, 618, 520, 116);
+      g.strokeStyle = INK; g.lineWidth = 3; G.box(g, 150, 470, 520, 110);
       g.fillStyle = INK;
-      G.text(g, '> run execution'.slice(0, Math.max(2, Math.floor(u * 20))), 176, 662, 34, 'left');
-      if (t > 69.25) { g.fillStyle = RED; G.fill(g, [[596, 636], [596, 716], [654, 676]]); }
+      G.text(g, '> run execution'.slice(0, Math.max(2, Math.floor(u * 20))), 176, 525, 34, 'left');
+      if (t > 69.25) { g.fillStyle = RED; G.fill(g, [[596, 488], [596, 568], [654, 528]]); }
     }
     if (t > 70.08) {
       const u = oback(seg(t, 70.08, 73.6));
@@ -600,7 +623,7 @@ S.push({ id: 'gifts', from: 74.04, to: 88.58,
       const u = oback(seg(t, it[1], it[1] + 0.55));
       g.fillStyle = it[3]; g.strokeStyle = INK; g.lineWidth = 3;
       const sc = 2.2 * u;
-      g.save(); g.translate(it[0], GY - 6); g.rotate(wob(t, 0.3, 0.03));
+      g.save(); g.translate(it[0], GY - 6);
       if (it[4] === 'cat') G.cat(g, 0, 0, sc, t);
       else if (it[4] === 'tomato') G.tomato(g, 0, 0, sc);
       else G.eggplant(g, 0, 0, sc);
@@ -637,7 +660,7 @@ S.push({ id: 'switches', from: 88.58, to: 110.9,
     : t < 103.48 ? { z: 1.1, x: DW * 0.5, y: DH * 0.44 }
     : { z: 1.0, x: DW * 0.5, y: DH * 0.46 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false });
+    sheet(g, col, t, F, { grid: 1, board: false, hy: DH * 0.72, sun: false });
     const cx = DW * 0.5, cy = DH * 0.4;
     g.lineWidth = 3; g.strokeStyle = INK; g.fillStyle = INK;
     if (t < 92.01) {
@@ -773,10 +796,10 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
       /* ILLEGAL ARGUMENTS lands where the line is, not six seconds early */
       const u = oback(seg(t, 131.22, 132.5));
       g.save(); g.translate(DW * 0.5, DH * 0.34); g.scale(u, u); g.rotate(-0.02);
-      g.fillStyle = 'rgba(232,68,106,0.10)'; g.fillRect(-440, -124, 880, 248);
-      g.strokeStyle = RED; g.lineWidth = 5; G.box(g, -440, -124, 880, 248);
-      g.fillStyle = RED; G.text(g, 'IllegalArgumentError: challenging your god', 0, -66, 34);
-      g.fillStyle = INK;
+      g.fillStyle = 'rgba(168,31,56,.08)'; g.fillRect(-440, -124, 880, 248);
+      g.strokeStyle = CRIM; g.lineWidth = 5; G.box(g, -440, -124, 880, 248);
+      g.fillStyle = CRIM_HI; G.text(g, 'IllegalArgumentError: challenging your god', 0, -66, 34);
+      g.fillStyle = CRIM;
       G.text(g, '    at world.execute(me.js:11)', 0, -6, 30);
       G.text(g, '    at you.leave(me.js:14)', 0, 40, 30);
       G.text(g, '    at me.love(me.js:7)', 0, 86, 30);
@@ -789,34 +812,43 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
     if (Math.floor(t * 2) % 2 === 0) g.fillRect(DW * 0.56 + 220, GY - 26, 26, 8);
   } });
 
-/* 10a — 147.66..155.20 s: the chant. Hard framing cuts every two repetitions. */
-S.push({ id: 'chant', from: 147.66, to: 155.20,
-  frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.22, x: DW * 0.5, y: DH * 0.36 } : { z: 1.0, x: DW * 0.5, y: DH * 0.5 },
+/* 10a — 147.66..155.20 s: the chant. Hard framing cuts every two repetitions.
+   The warrant holds still and the camera works around it, so the line being read is
+   always on the page; the prisoner stands clear to the right of the sheet. */
+S.push({ id: 'chant', from: 147.66, to: 155.20, shake: 1, cut: true,
+  frame: (k, t) => Math.floor((t - 147.66) / 1.88) % 2 ? { z: 1.12, x: DW * 0.5, y: DH * 0.38 } : { z: 1.0, x: DW * 0.5, y: DH * 0.44 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false, dark: true });
-    const hit = Math.min(7, Math.floor((t - 147.66) / 0.94));
-    code(g, 10 + hit, 240, 150, 62);
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.72, sun: false });
+    code(g, 10 + Math.min(7, Math.floor((t - 147.66) / 0.94)));
     g.fillStyle = INK; g.strokeStyle = col.rim;
-    G.figure(g, DW * 0.5, GY, 1.2, t > 150.5 ? 'kneel' : 'stand', t, RED, F[8] * 0.5);
+    G.figure(g, DW * 0.83, GY, 1.2, t > 150.5 ? 'kneel' : 'stand', t, RED, F[8] * 0.5);
   } });
 
-/* 10b — 155.20..158.90 s: the same word becomes 死刑. Closer, still cutting. */
-S.push({ id: 'sentence', from: 155.20, to: 158.90,
-  frame: (k, t) => [{ z: 1.22, x: DW * 0.5, y: DH * 0.34 }, { z: 1.1, x: DW * 0.5, y: DH * 0.52 },
-                    { z: 1.22, x: DW * 0.5, y: DH * 0.44 }, { z: 1.0, x: DW * 0.5, y: DH * 0.58 }][Math.floor((t - 155.2) / 0.94) % 4],
+/* 10b — 155.20..158.90 s: the same word becomes 死刑. The last three statements, each signed. */
+S.push({ id: 'sentence', from: 155.20, to: 158.90, shake: 1.3, cut: true,
+  frame: (k, t) => Math.floor((t - 155.2) / 0.94) % 2 ? { z: 1.1, x: DW * 0.5, y: DH * 0.4 } : { z: 1.02, x: DW * 0.5, y: DH * 0.46 },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.74, sun: false, dark: true });
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.74, sun: false });
     const hit = Math.min(3, Math.floor((t - 155.2) / 0.94));
-    code(g, 15 + hit, 240, 150 - 9 * 62, 62);       /* the last four statements */
+    const last = 16 + Math.min(2, hit);
+    code(g, last);
+    g.fillStyle = 'rgba(255,45,85,.85)';
+    for (let i = 0; i <= hit; i++) {                       /* 朱批, one per verdict */
+      const idx = 16 + Math.min(2, i), yy = PLATE.y + (idx - PLATE.from) * PLATE.lh + PLATE.lh / 2;
+      const u = oback(seg(t, 155.2 + i * 0.94, 155.5 + i * 0.94));
+      g.save(); g.translate(972, yy); g.scale(u, u); G.brush(g, 0, 0, 56, 17); g.restore();
+    }
     g.fillStyle = INK; g.strokeStyle = col.rim;
-    G.figure(g, DW * 0.5, GY, 1.25, 'kneel', t, RED, F[8] * 0.4);
+    G.figure(g, DW * 0.83, GY, 1.25, 'kneel', t, RED, F[8] * 0.4);
   } });
 
-/* 10c — 158.90..161.58 s: counting to six in six languages, one frame per numeral */
-S.push({ id: 'count', from: 158.90, to: 161.58,
-  frame: (k, t) => { const i = Math.min(5, Math.floor((t - 158.9) / 0.44)); return { z: 1.45 + (i % 3) * 0.3, x: DW * (0.34 + (i % 3) * 0.16), y: DH * (0.32 + (i % 2) * 0.22) }; },
+/* 10c — 158.90..161.58 s: counting to six in six languages, one frame per numeral.
+   The numeral is always drawn at the centre of the page, so the camera may push in on it
+   but must not pan off it — panning to 0.34 put "TROIS" outside the frame at z=2. */
+S.push({ id: 'count', from: 158.90, to: 161.58, shake: 1.6, cut: true,
+  frame: (k, t) => { const i = Math.min(5, Math.floor((t - 158.9) / 0.44)); return { z: 1.15 + (i % 3) * 0.22, x: DW * 0.5, y: DH * (0.42 + (i % 2) * 0.06) }; },
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, horizon: false, dark: true });
+    sheet(g, col, t, F, { grid: 0, board: false, horizon: false });
     const names = ['EIN', 'DOS', 'TROIS', 'NE', 'FEM', 'LIU'];
     const i = Math.min(5, Math.floor((t - 158.9) / 0.44));
     const u = oback(seg(t, 158.9 + i * 0.44, 159.06 + i * 0.44));
@@ -828,32 +860,36 @@ S.push({ id: 'count', from: 158.90, to: 161.58,
     G.figure(g, DW * 0.5, GY, 1.1, 'kneel', t, RED, 0);
   } });
 
-/* 10d — 161.58..169.82 s: give them all the execution. The cage comes down. */
-S.push({ id: 'give', from: 161.58, to: 169.82,
-  frame: (k) => ({ z: 1.02 + k * 0.2, x: DW * 0.5, y: DH * (0.52 - k * 0.06) }),
+/* 10d — 161.58..169.82 s: give them all the execution. The cage comes down behind the
+   signed sheet, and lands on the prisoner rather than across the page. */
+S.push({ id: 'give', from: 161.58, to: 169.82, shake: 1,
+  frame: (k) => ({ z: 1.02 + k * 0.14, x: DW * 0.5, y: DH * (0.5 - k * 0.04) }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.7, sun: false, dark: true });
-    code(g, 18, 240, 150 - 6 * 62, 62);             /* the whole program has run */
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.7, sun: false });
     const u = oback(seg(t, 161.58, 164.6));
     g.strokeStyle = RED; g.lineWidth = 8;
-    G.cage(g, DW * 0.5, DH * (0.02 + u * 0.12), GY + 6, DW * 0.66, 8);
+    G.cage(g, DW * 0.83, DH * (0.02 + u * 0.1), GY + 6, DW * 0.34, 5);
+    code(g, 18);                                           /* the whole program has run */
     g.fillStyle = INK; g.strokeStyle = col.rim;
-    G.figure(g, DW * 0.5, GY, 1.2, t > 167.02 ? 'stand' : 'kneel', t, RED, F[8] * 0.3);
-    if (t > 168.91) { g.strokeStyle = RED; g.fillStyle = RED; G.blade(g, DW * 0.72, GY, 1.5, -0.12); }
+    G.figure(g, DW * 0.83, GY, 1.2, t > 167.02 ? 'stand' : 'kneel', t, RED, F[8] * 0.3);
+    if (t > 168.91) { g.strokeStyle = RED; g.fillStyle = RED; G.blade(g, DW * 0.9, GY, 1.4, -0.12); }
   } });
 
-/* 10e — 169.82..177.24 s: if I can have you back. The red drains out of the sky. */
+/* 10e — 169.82..177.24 s: if I can have you back. The verdict is struck out from the
+   bottom line up — Orpheus looking back, and losing her again. */
 S.push({ id: 'back', from: 169.82, to: 177.24,
-  frame: (k) => ({ z: 1.45 - k * 0.5, x: DW * (0.5 + 0.07 * Math.sin(k * 4)), y: DH * (0.44 + k * 0.1) }),
+  frame: (k) => ({ z: 1.08 - k * 0.08, x: DW * (0.5 + 0.04 * Math.sin(k * 4)), y: DH * (0.45 + k * 0.05) }),
   draw(g, k, F, t, col) {
-    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.66, sun: true, dark: true });
-    /* unwinding, line by line — Orpheus looking back, and losing her again */
-    code(g, undefined, 240, 150 - 6 * 62, 62, Math.round(18 - k * 9));
+    sheet(g, col, t, F, { grid: 0, board: false, hy: DH * 0.66, sun: false });
+    code(g, undefined, 18 - Math.round(k * 9));
     snow(g, t, F, 60, col);
     g.fillStyle = INK; g.strokeStyle = col.rim;
-    G.figure(g, DW * 0.5, GY, 1.25, t > 173.6 ? 'reach' : 'stand', t, col.hot, F[8]);
+    G.figure(g, DW * 0.83, GY, 1.2, t > 173.6 ? 'reach' : 'stand', t, col.hot, F[8]);
+    g.globalAlpha = 1 - seg(t, 173.6, 176.6);              /* she is already going */
+    G.figure(g, DW * 0.96, GY, 0.8, 'empty', t, null, 0);
+    g.globalAlpha = 1;
     g.strokeStyle = 'rgba(232,68,106,0.6)'; g.lineWidth = 3;
-    G.circle(g, DW * 0.5, GY - 150, 210 + F[8] * 40);
+    G.circle(g, DW * 0.83, GY - 150, 210 + F[8] * 40);
   } });
 
 /* 11a — 177.24..184.54 s: she has studied. Three framings, written as she sings. */
@@ -911,8 +947,11 @@ S.push({ id: 'powerdown', from: 193, to: 205.81,
   frame: (k) => ({ z: 1.02 + k * 0.24, x: DW * 0.5, y: DH * (0.5 + k * 0.08) }),
   draw(g, k, F, t, col) {
     sheet(g, col, t, F, { grid: 0, board: false, hy: DH * (0.66 + k * 0.1), sun: k < 0.7 });
+    /* the same window from "you have left", now going dark — without the mullions it
+       reads as a stray rectangle rather than the room's one lit pane */
     g.strokeStyle = INK; g.lineWidth = 3;
-    G.box(g, 1080, 150, 300, 330); g.globalAlpha = 1 - k; g.fillStyle = col.hot;
+    G.box(g, 1080, 150, 300, 330); G.line(g, 1230, 150, 1230, 480); G.line(g, 1080, 315, 1380, 315);
+    g.globalAlpha = 1 - k; g.fillStyle = col.hot;
     g.fillRect(1082, 152, 296, 326); g.globalAlpha = 1;
     g.fillStyle = INK; g.strokeStyle = INK;
     G.figure(g, DW * 0.5, GY, 1.15 * (1 - k * 0.2), 'stand', t, col.hot, (1 - k) * F[8]);

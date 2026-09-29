@@ -32,6 +32,16 @@ window.STORY = {
   /* the LRC as an independent witness for the tempo estimate */
   corroboration: 'the EXECUTION chant (12 lines, 147.66-158.00 s) is 0.94 s apart = 127.5 BPM against 128.3 detected',
 
+  /* 查证到的外部事实，只出现在开场的事实表里，不进入影片叙事。
+    参考的是背景，不是别人的画面：本片没有一个镜头是从任何现成 MV 复制来的。 */
+  context: {
+    released: 'Miracle Milk — 2016-10-12 (Japan)',
+    band: 'Cassie Wei (voice) · Yamato Kasai (g) · Yukihito Mitomo (b) · Shoto Yoshida (dr) · Ao Fujimori (illustration)',
+    lineage: 'electronica / classical / game music — the band cites YMO as a root',
+    reception: 'June 2016: Polish osu! player "Exile-" generated 594,285 lines of Java to build this song\u2019s storyboard',
+    texture: 'measured: flatness 18-25 under the verses vs 43-73 at the chorus entries — a tonal body and a noise-bright layer, alternating'
+  },
+
   acts: [
     { from: 0, to: 15, tag: 'boot',
       cards: [{ at: 0.2, en: 'cold boot — no runtime, no name' }, { at: 0.4, en: 'credits: music & lyrics by Mili / momocashew' }],

@@ -5,8 +5,9 @@
  * grain, a light vignette, letterbox. Scenes dissolve into each other through an offscreen
  * buffer, so a cut is never a jump.
  *
- * Deliberately absent: beat-synced flashing, camera shake and slice glitching. The picture
- * breathes with the loudness envelope instead; a music video should not strobe.
+ * Deliberately absent: beat-synced flashing and slice glitching. The picture breathes with
+ * the loudness envelope, the camera holds its framing, and the only shake left is the
+ * chant's — asked for by scene name, and gated on the onsets that were measured.
  *
  * All numbers come from mv/score.data.js, produced by analysis/analyze.html from the MP3.
  */
@@ -30,13 +31,16 @@ const ui = {
 };
 
 /* ---------------- analysis data access ---------------- */
-const HOP = META.hopMs / 1000, NF = S.frames.b0.length;
+const HOP = META.hopMs / 1000;
 const KEYS = ['b0','b1','b2','b3','b4','b5','b6','b7','rms','centroid','flux','width','f0','voiced','flat'];
 const BMIN = S.ranges.bands.map(r => r[0]), BMAX = S.ranges.bands.map(r => r[1]);
 const R_RMS = S.ranges.rms, R_F0 = S.ranges.f0;
 const D = {};
 function b64bytes(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 for (const k of KEYS) D[k] = b64bytes(S.frames[k]);
+/* the decoded length, not the base64 string's length — those differ by 4/3, and using the
+   string's length let the last half-second of the film read past the end of every array */
+const NF = D.b0.length;
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -131,14 +135,20 @@ function resize() {
 addEventListener('resize', resize);
 
 /* the camera is per-scene and per-moment: scenes return {z,x,y} in design units.
-   It travels faster while the mix is dense and leans in on a strong onset — motion,
-   not brightness, so the picture gains pace without flashing. */
+   It no longer wanders. There used to be a two-term sine drift on both axes, scaled by
+   loudness — it read as a picture that could not hold still, and it cropped the code
+   listing at the framing cuts. The only movement left is each scene's own deliberate
+   frame(k,t) push, plus a onset-gated shake that a scene has to ask for by name.
+
+   The design space is fitted with min(), not max(): a tall or narrow window used to crop
+   the sides of the 16:9 page, which is how the listing lost its left-hand columns. Now the
+   whole sheet is always on screen and the surplus becomes letterbox. */
+function fitScale() { return Math.min(W / DW, HH / DH); }
 function applyCamera(g, fr, t) {
-  const scale = Math.max(W / DW, HH / DH) * fr.z * (1 + punch * 0.024);
-  const rate = 0.07 + env * 0.3, amp = 8 + env * 18;
-  const drift = Math.sin(t * rate) * amp + Math.sin(t * rate * 0.44) * amp * 0.6;
-  g.setTransform(scale, 0, 0, scale, W / 2 - fr.x * scale + drift,
-    HH / 2 - fr.y * scale + Math.cos(t * rate * 0.7) * amp * 0.5);
+  const scale = fitScale() * fr.z * (1 + (fr.shake || 0) * punch * 0.012);
+  let sx = 0, sy = 0;
+  if (fr.shake) { const a = fr.shake * punch * 13; sx = Math.sin(t * 33.7) * a; sy = Math.cos(t * 27.1) * a; }
+  g.setTransform(scale, 0, 0, scale, W / 2 - fr.x * scale + sx, HH / 2 - fr.y * scale + sy);
 }
 const WIDE = { z: 1.05, x: DW / 2, y: DH / 2 };
 function frameOf(sc, k, t) {
@@ -204,16 +214,43 @@ function cameraAt(t) {
   const i = SCENES.findIndex(s => t >= s.from && t < s.to);
   const cur = SCENES[i < 0 ? SCENES.length - 1 : i];
   const k = clamp01((t - cur.from) / (cur.to - cur.from));
-  let f = frameOf(cur, k, t);
+  const f0 = frameOf(cur, k, t);
+  let f = { z: f0.z, x: f0.x, y: f0.y, shake: cur.shake || 0 };
   const prev = i > 0 ? SCENES[i - 1] : null;
   if (prev) {
     const since = t - cur.from;
     if (since < SETTLE) {
       const u = since / SETTLE, pf = frameOf(prev, 1, t);
-      f = { z: lerp(pf.z, f.z, u), x: lerp(pf.x, f.x, u), y: lerp(pf.y, f.y, u) };
+      f = { z: lerp(pf.z, f.z, u), x: lerp(pf.x, f.x, u), y: lerp(pf.y, f.y, u),
+            shake: Math.max(prev.shake || 0, f.shake) };
     }
   }
   return f;
+}
+
+/* Framing switches inside one scene used to teleport the picture: wide for frame N, tight
+   for frame N+1, with nothing in between. The 60 fps sweep showed them as single-frame
+   motion spikes at 4.8 / 47.7 / 49.5 / 51.4 / 55.1 / 77.6 / 81.4 / 85.1 / 92.0 / 95.5 /
+   99.3 / 103.5 / 117.3 / 124.9 / 179.9 / 180.9 s. Everywhere except the chant — where the
+   cut is the editing device and lands on the beat — the camera now slews to the new
+   framing, so the move reads as a move. */
+const SLEW = 0.2;
+let camState = null, camStateT = -1, lastCam = null;
+function cameraFor(t) {
+  const f = cameraAt(t);
+  const sc = SCENES.find(s => t >= s.from && t < s.to);
+  const hard = !!(sc && sc.cut);
+  const dt = Math.min(0.25, Math.max(0, t - camStateT));
+  if (!camState || hard || t < camStateT || t - camStateT > 0.5) camState = { z: f.z, x: f.x, y: f.y };
+  else {
+    const a = 1 - Math.exp(-dt / SLEW);
+    camState.z += (f.z - camState.z) * a;
+    camState.x += (f.x - camState.x) * a;
+    camState.y += (f.y - camState.y) * a;
+  }
+  camStateT = t;
+  lastCam = { z: camState.z, x: camState.x, y: camState.y, shake: f.shake };
+  return lastCam;
 }
 
 function renderScene(g, idx, t, cam) {
@@ -259,8 +296,12 @@ const grain = (() => {
 let grainPat = null;
 
 function composite(t, reduced) {
+  const fit = fitScale(), dw = DW * fit, dh = DH * fit, ox = (W - dw) / 2, oy = (HH - dh) / 2;
   cx.setTransform(1, 0, 0, 1, 0, 0);
   cx.imageSmoothingEnabled = true;
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, W, HH);
+  cx.save();
+  cx.beginPath(); cx.rect(ox, oy, dw, dh); cx.clip();
   cx.drawImage(buf, 0, 0);
   /* bloom instead of flash: downscale, then add it back softly. It swells over ~1 s,
      so the picture breathes with the phrase instead of twitching on every kick. */
@@ -275,15 +316,20 @@ function composite(t, reduced) {
   }
   if (!grainPat) grainPat = cx.createPattern(grain, 'repeat');
   cx.save();
-  cx.globalAlpha = 0.07 + envAir * 0.1;
+  /* the grain follows the measured noisiness of the recording, not its brightness: the
+     analysis says this song alternates between a pitched, low-flatness body and bright,
+     noise-like passages (flatness 18-25 under the verses, 43-73 at the chorus entries and
+     the outro's chip arpeggio), so the film's own grain swells with the noise floor. */
+  cx.globalAlpha = 0.055 + raw[14] * 0.16;
   cx.translate(Math.floor(rnd() * 128) - 64, Math.floor(rnd() * 128) - 64);
   cx.fillStyle = grainPat; cx.fillRect(-64, -64, W + 128, HH + 128);
   cx.restore();
-  const vg = cx.createRadialGradient(W / 2, HH / 2, Math.min(W, HH) * 0.3, W / 2, HH / 2, Math.max(W, HH) * 0.72);
+  const vg = cx.createRadialGradient(W / 2, HH / 2, Math.min(dw, dh) * 0.3, W / 2, HH / 2, Math.max(dw, dh) * 0.72);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${((0.62 - env * 0.16) * (1 - pal.lum * 0.74)).toFixed(3)})`);
-  cx.fillStyle = vg; cx.fillRect(0, 0, W, HH);
-  const bar = Math.round(HH * 0.05);
-  cx.fillStyle = '#000'; cx.fillRect(0, 0, W, bar); cx.fillRect(0, HH - bar, W, bar);
+  cx.fillStyle = vg; cx.fillRect(ox, oy, dw, dh);
+  const bar = Math.round(dh * 0.05);
+  cx.fillStyle = '#000'; cx.fillRect(ox, oy, dw, bar); cx.fillRect(ox, oy + dh - bar, dw, bar);
+  cx.restore();
 }
 
 /* ---------------- captions (the song's own words) ---------------- */
@@ -370,6 +416,8 @@ function buildHUD() {
     ['loudness', `peak ${META.loudness.peak.toFixed(3)}, RMS ${META.loudness.rms.toFixed(3)}, ${META.loudness.clippedSamples} clipped samples`],
     ['analysis', `${META.frames} frames @ ${META.hopMs.toFixed(1)} ms · ${S.bands.length} bands · melody + stereo width`]
   ];
+  const ctx = STORY.context || {};
+  for (const k of ['released', 'band', 'lineage', 'reception', 'texture']) if (ctx[k]) facts.push([k, ctx[k]]);
   for (const [k, v] of facts) {
     const dt = document.createElement('dt'); dt.textContent = k;
     const dd = document.createElement('dd'); dd.textContent = v;
@@ -411,6 +459,17 @@ function drawPlayhead(t) {
 /* ---------------- main loop ---------------- */
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let playing = false, lastTs = 0;
+/* The film normally runs off the audio clock. The clock can be pinned to a time so a
+   single frame can be stepped exactly — a media seek has to round-trip before
+   track.currentTime moves, which makes frame-by-frame checking impossible. */
+let clock = () => track.currentTime;
+window.MV = {
+  pin(t) { clock = () => t; },
+  unpin() { clock = () => track.currentTime; },
+  step(ts) { render(ts); },
+  cam() { return lastCam; },
+  get time() { return clock(); }
+};
 const schedule = () => document.hidden
   ? setTimeout(() => frame(performance.now()), 33)
   : requestAnimationFrame(frame);
@@ -423,14 +482,14 @@ function render(ts) {
   const wall = lastTs ? (ts - lastTs) / 1000 : 0.016;
   const dt = Math.min(0.05, wall); lastTs = ts;
   if (!W) resize();
-  const t = track.currentTime || 0;
+  const t = clock();
   sample(t);
   updatePalette(t, Math.min(0.5, wall));
   advanceClock(t, dt);
   drawSky(t);
   let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
   if (idx < 0) idx = SCENES.length - 1;
-  const cam = cameraAt(t);
+  const cam = cameraFor(t);
   const nxt = SCENES[idx + 1];
   const dis = lerp(1.15, 0.45, clamp01(env * 1.25));      /* the chorus joins tighter than the intro */
   if (nxt && nxt.from - t < dis) {
@@ -447,6 +506,9 @@ function render(ts) {
   drawMotes(t);
   composite(t, reduced);
   updateText(t); updateHUD(t); drawPlayhead(t);
+  /* a scene that throws is caught inside renderScene, so say so on screen —
+     a silently missing motif is indistinguishable from an unfinished one */
+  if (window.__sceneErr) warn('scene threw: ' + window.__sceneErr);
 }
 
 /* ---------------- transport ---------------- */
