@@ -26,20 +26,20 @@ window.STORY = {
   palette: {
     /* waking up: a cold, slightly blue start-up light */
     boot:      { room0: '#070a0e', room1: '#111820', page: '#eef2f6', ink: '#1d2833', accent: '#b3263a', rim: '#cfe0f0', glow: '#9fc0e2', lum: 0.62 },
-    /* the title card inside the globe: warmer, softer, the lamp has settled */
-    interlude: { room0: '#080b10', room1: '#151d27', page: '#f2f1ea', ink: '#20272f', accent: '#b3263a', rim: '#d8e4ef', glow: '#a8c2da', lum: 0.68 },
+    /* the title card inside the globe: warmer, softer, the lamp has settled */    interlude: { room0: '#080b10', room1: '#151d27', page: '#f2f1ea', ink: '#20272f', accent: '#b3263a', rim: '#d8e4ef', glow: '#a8c2da', lum: 0.68 },
     /* the instance is writing: the brightest, most neutral reading light of the film */
-    verse:     { room0: '#0a0d11', room1: '#18202a', page: '#f6f7f4', ink: '#1b242c', accent: '#a81f38', rim: '#e2ecf5', glow: '#b8cfe4', lum: 0.74 },
-    /* the chorus: over-exposed, the light spills, the halo widens */
-    chorus:    { room0: '#0c0e12', room1: '#1d232b', page: '#fbf6ee', ink: '#22262c', accent: '#d81b43', rim: '#f0e6df', glow: '#d8b8ac', lum: 0.86 },
+    /* the verses: a Prussian-blue night, one blue plus the ink and the one red */
+    verse:     { room0: '#040910', room1: '#0d1b2b', page: '#e2ecf5', ink: '#132131', accent: '#b3263a', rim: '#bcd8ee', glow: '#6fa0cc', lum: 0.74 },
+    /* the chorus: black, vermilion and gold — the same three-plate discipline, warmer */
+    chorus:    { room0: '#0d0708', room1: '#251318', page: '#f8ecd6', ink: '#2a1c14', accent: '#e0344f', rim: '#f2dcc0', glow: '#e0a86a', lum: 0.86 },
     /* you have left: the lamp browns and drops */
     collapse:  { room0: '#08070a', room1: '#141114', page: '#ddd0b8', ink: '#2b2419', accent: '#a8402c', rim: '#b9a98d', glow: '#8c7a5e', lum: 0.40 },
     /* nothing scheduled: barely lit, the page is almost out of the room */
     dusk:      { room0: '#050608', room1: '#0b0e12', page: '#9fa4a6', ink: '#171a1c', accent: '#7c2a38', rim: '#7e8a96', glow: '#5f6f7e', lum: 0.20 },
     /* EXECUTION: the room turns the colour of the verdict, and the page is the warrant */
     execution: { room0: '#0b0305', room1: '#210810', page: '#f3ece0', ink: '#2a0d14', accent: '#ff2d55', rim: '#e8b8c0', glow: '#b3263a', lum: 0.30 },
-    /* the answer: cold clean light again, and gentler than the verses */
-    reveal:    { room0: '#080a0f', room1: '#161c26', page: '#f1f2f5', ink: '#1e242e', accent: '#c02a44', rim: '#dbe6f2', glow: '#a6bed6', lum: 0.70 },
+    /* the answer: a pale violet-cold light, gentler than the verses */
+    reveal:    { room0: '#07070f', room1: '#161628', page: '#eef0f8', ink: '#1e2030', accent: '#c02a44', rim: '#d5daf2', glow: '#9aa4d8', lum: 0.70 },
     /* the light going out of the room */
     outro:     { room0: '#030406', room1: '#080b0f', page: '#7d8790', ink: '#12161a', accent: '#7a2230', rim: '#5d6a76', glow: '#46525e', lum: 0.12 }
   },
