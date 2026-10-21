@@ -150,7 +150,13 @@ function applyCamera(g, fr, t) {
      anybody having to author it per shot. */
   const bt = window.MUSIC ? MVL.beatAt(t) : null;
   const breath = bt ? 1 + 0.016 * Math.sin(bt.phase * Math.PI) : 1;
-  const accent = bt && bt.inBar === 0 ? bt.w * 0.026 : 0;
+  /* the push has an attack and a release. Stepping straight to full scale on the downbeat was
+     the last unattributed one-frame spike in the sweep — a gesture you should feel, not see */
+  let accent = 0;
+  if (bt) {
+    const since = Math.max(0, t - bt.barT0);
+    accent = bt.w * 0.026 * clamp01(since / 0.06) * Math.exp(-Math.max(0, since - 0.06) / 0.22);
+  }
   const scale = fitScale() * fr.z * breath * (1 + accent) * (1 + (fr.shake || 0) * punch * 0.012);
   let sx = 0, sy = 0;
   if (fr.shake) { const a = fr.shake * punch * 13; sx = Math.sin(t * 33.7) * a; sy = Math.cos(t * 27.1) * a; }
@@ -500,14 +506,14 @@ function render(ts) {
   updatePalette(t, Math.min(0.5, wall));
   advanceClock(t, dt);
   drawRoom(t);
+  let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
+  if (idx < 0) idx = SCENES.length - 1;
+  const cam = cameraFor(t);
   /* the two layers that come from the recording go in *behind* the sheet. The paper is the light
      source, so the stroke and the word belong to the room and the page covers whatever runs
      behind it — the word reads as emerging out of the light, not as an overlay on top of it. */
   bx.setTransform(1, 0, 0, 1, 0, 0);
-  if (window.MUSIC) { MVL.melody(bx, t, W, HH, pal); MVL.display(bx, t, W, HH, pal, LYRICS); }
-  let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
-  if (idx < 0) idx = SCENES.length - 1;
-  const cam = cameraFor(t);
+  if (window.MUSIC) { MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z); }
   const nxt = SCENES[idx + 1];
   const dis = dissolveLen(nxt ? nxt.from : t);      /* the chorus joins tighter than the intro */
   if (nxt && nxt.from - t < dis) {

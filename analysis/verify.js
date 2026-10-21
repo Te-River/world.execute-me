@@ -324,6 +324,15 @@ async function report() {
   return out;
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot };
+/* Eight frames, one per kind of moment, stepped and checked for a throw. Cheap enough to run
+   before the 250-second sweep and worth it: a ReferenceError in the camera maths made every
+   frame of one sweep throw, and this catches that in a second instead of at the end. */
+function smoke() {
+  const ts = [0.5, 4, 33, 50.2, 118, 150, 189, 210], errs = [];
+  for (const t of ts) { try { window.MV.pin(t); window.MV.step(t * 1000); } catch (e) { errs.push(t + ': ' + e.message); } }
+  return errs.length ? errs : ['ok'];
+}
+
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke };
 return 'VERIFY ready';
 })();
