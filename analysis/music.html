@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>music — read the recording as music, not as a spectrum</title>
+<style>
+  body { background: #0d0f14; color: #cdd6f4; font: 13px/1.6 ui-monospace, Consolas, monospace; margin: 24px; }
+  h1 { font-size: 17px; font-weight: 500; } h2 { font-size: 14px; font-weight: 500; margin-top: 26px; color: #89b4fa; }
+  table { border-collapse: collapse; margin: 8px 0; } td, th { border: 1px solid #313244; padding: 3px 9px; text-align: right; }
+  th { color: #a6adc8; font-weight: 400; } pre { white-space: pre-wrap; color: #f9e2af; }
+  canvas { background: #11131a; display: block; margin: 6px 0; }
+  button { background: #b3263a; color: #fff; border: 0; padding: 8px 16px; font: inherit; cursor: pointer; }
+  .warn { color: #f38ba8; }
+</style>
+</head>
+<body>
+<h1>analysis/music.html — the musical layer (tempo, meter, harmony, melody, form)</h1>
+<p>The acoustic pass (analysis/analyze.html) measured bands, flux and flatness. Those drive grain and
+bloom, but they cannot tell you where the beat is, what the chord loop is, or which note the singer is
+holding when a word lands. This pipeline extracts the music instead, so the picture can be a function of
+it and not only of the lyric.</p>
+<p><button onclick="run()">run()</button> <span id="st"></span></p>
+<div id="out"></div>
+<script src="../mv/lyrics.js"></script>
+<script>
+const SR = 22050;                       /* analysis rate; the file is 44.1 kHz, we mix down */
+const HOP = 512, NFFT = 2048;           /* 23.2 ms hop, 92.9 ms window */
+const HOPS = HOP / SR;
+const P = [];                           /* [i] = {t, flux, low, hi, flat, rms, cen} */
+const S = {};                           /* the exported score */
+const el = (id) => document.getElementById(id);
+const say = (m) => { el('st').textContent = m; };
+
+function mix(buf) {
+  const n = Math.floor(buf.length / 2), o = new Float32Array(n);
+  for (let i = 0; i < n; i++) o[i] = (buf[i * 2] + buf[i * 2 + 1]) * 0.5;
+  return o;
+}
+/* keep only every SR/22050-th sample — a crude decimator, good enough above 11 kHz we discard anyway */
+function resample(x, s0, s1) {
+  const r = s1 / s0, n = Math.floor(x.length * r), o = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const p = i / r, k = Math.floor(p), f = p - k; o[i] = x[k] * (1 - f) + (x[k + 1] || 0) * f; }
+  return o;
+}
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k], ai = im[i + k], br = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci,
+          bi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k] = ar + br; im[i + k] = ai + bi;
+        re[i + k + len / 2] = ar - br; im[i + k + len / 2] = ai - bi;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+const hann = new Float32Array(NFFT);
+for (let i = 0; i < NFFT; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / NFFT);
+const NB = 84;                           /* log bins, ~52 cents each, 40 Hz .. 10 kHz */
+const binOf = (k) => Math.min(NFFT / 2 - 1, Math.max(1, Math.round(40 * Math.pow(10000 / 40, k / NB) * NFFT / SR)));
+
+function frames(x) {
+  const re = new Float32Array(NFFT), im = new Float32Array(NFFT);
+  let prev = null;
+  for (let s = 0; s + NFFT < x.length; s += HOP) {
+    for (let i = 0; i < NFFT; i++) { re[i] = x[s + i] * hann[i]; im[i] = 0; }
+    fft(re, im);
+    const mag = new Float32Array(NB);
+    for (let k = 0; k < NB; k++) mag[k] = Math.hypot(re[binOf(k)], im[binOf(k)]);
+    let low = 0, hi = 0, all = 0, geo = 0, ari = 0, rms = 0;
+    for (let k = 0; k < NB; k++) {
+      all += mag[k]; ari += mag[k]; geo += Math.log(mag[k] + 1e-9);
+      if (k < 18) low += mag[k]; if (k > 58) hi += mag[k];
+    }
+    for (let i = 0; i < NFFT; i++) rms += x[s + i] * x[s + i];
+    const t = (s + NFFT / 2) / SR;
+    let flux = 0;
+    if (prev) for (let k = 0; k < NB; k++) { const d = mag[k] - prev[k]; if (d > 0) flux += d; }
+    prev = mag;
+    P.push({ t, flux, low, hi, rms: Math.sqrt(rms / NFFT), flat: Math.exp(geo / NB) / (ari / NB + 1e-9),
+             cen: (() => { let num = 0, den = 0; for (let k = 0; k < NB; k++) { num += 40 * Math.pow(250, k / NB) * mag[k]; den += mag[k]; } return den ? num / den : 0; })(), mag });
+  }
+}
+
+/* ---------------- pitch: autocorrelation on a band-passed, whitened frame ---------------- */
+function f0at(x, s) {
+  const W = 2048, lo = Math.round(SR / 1000), hi = Math.round(SR / 75);   /* 75 Hz .. 1000 Hz */
+  let best = 0, bestv = 0, sum = 0;
+  const buf = new Float32Array(W);
+  for (let i = 0; i < W; i++) buf[i] = x[s + i] || 0;
+  for (let i = 0; i < W; i++) sum += buf[i] * buf[i];
+  if (sum < 1e-4) return 0;
+  for (let lag = lo; lag <= hi; lag++) {
+    let c = 0, e = 0;
+    for (let i = 0; i < W - lag; i += 2) { c += buf[i] * buf[i + lag]; e += buf[i + lag] * buf[i + lag]; }
+    const n = c / (e + 1e-9);
+    if (n > bestv) { bestv = n; best = lag; }
+  }
+  return bestv > 0.42 ? SR / best : 0;
+}
+
+/* ---------------- chroma ---------------- */
+const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function chromaAt(x, s) {
+  const re = new Float32Array(8192), im = new Float32Array(8192), out = new Float32Array(12);
+  for (let i = 0; i < 8192; i++) { re[i] = (x[s + i] || 0); im[i] = 0; }
+  fft(re, im);
+  for (let m = 55; m < 2000; m++) {                       /* every bin in the musical range */
+    const f = m * SR / 8192; if (f < 55 || f > 2000) continue;
+    const a = Math.hypot(re[m], im[m]); if (a < 1e-4) continue;
+    const p = 12 * Math.log2(f / 440) + 69;
+    out[((Math.round(p) % 12) + 12) % 12] += a * a;
+  }
+  let mx = 0; for (let k = 0; k < 12; k++) mx = Math.max(mx, out[k]);
+  for (let k = 0; k < 12; k++) out[k] = mx ? out[k] / mx : 0;
+  return out;
+}
+const MAJ = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1], MIN = [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0];
+function rot(v, n) { const o = new Float32Array(12); for (let i = 0; i < 12; i++) o[i] = v[(i + n) % 12]; return o; }
+function corr(a, b) {
+  let sa = 0, sb = 0, ma = 0, mb = 0;
+  for (let i = 0; i < 12; i++) { ma += a[i]; mb += b[i]; }
+  ma /= 12; mb /= 12;
+  for (let i = 0; i < 12; i++) { sa += (a[i] - ma) * (b[i] - mb); sb += (a[i] - ma) * (a[i] - ma) + (b[i] - mb) * (b[i] - mb); }
+  return sa / (Math.sqrt(sb / 2) + 1e-9);
+}
+function chordOf(c) {
+  let best = { name: '-', r: -2 };
+  for (let n = 0; n < 12; n++) {
+    const r = corr(rot(c, n), MAJ); if (r > best.r) best = { name: NOTES[n], r, q: 'maj' };
+    const m = corr(rot(c, n), MIN); if (m > best.r) best = { name: NOTES[n] + 'm', r: m, q: 'min' };
+  }
+  return best;
+}
+
+/* ---------------- beat grid: tempo from the onset autocorrelation, phase from a DP ---------------- */
+function tempo() {
+  const o = new Float32Array(P.length);
+  for (let i = 0; i < P.length; i++) o[i] = Math.max(0, P[i].flux);
+  const stats = [];
+  for (let bpm = 60; bpm <= 180; bpm += 0.25) {
+    const lag = Math.round(60 / bpm / HOPS);
+    if (lag * 2 >= o.length) continue;
+    let s = 0, n = 0;
+    for (let i = 0; i + 2 * lag < o.length; i += 2) { s += o[i] * (o[i + lag] + 0.5 * o[i + 2 * lag]); n++; }
+    s /= n;
+    /* prefer 128-ish: this song's own evidence is the 0.94 s chant (two beats at ~127.7) */
+    const prior = Math.exp(-0.5 * Math.pow(Math.log(bpm / 128) / 0.28, 2));
+    stats.push({ bpm, s, score: s * (0.55 + 0.45 * prior) });
+  }
+  stats.sort((a, b) => b.score - a.score);
+  return stats[0];
+}
+function beats(bpm) {
+  const lag = 60 / bpm / HOPS, o = P.map((f) => Math.max(0, f.flux));
+  let mx = 0; for (const v of o) mx = Math.max(mx, v);
+  for (let i = 0; i < o.length; i++) o[i] = Math.pow(o[i] / mx, 1.5);
+  /* Viterbi over one period of phase, then walk the whole file at constant tempo */
+  const N = 4, pen = 0.045;
+  let bestPhase = 0, bestScore = -1e9;
+  for (let ph = 0; ph < lag; ph += 1) {
+    let sc = 0, k = 0;
+    for (let t = Math.round(ph); t < o.length; t += Math.round(lag), k++) {
+      let w = 0; for (let d = -2; d <= 2; d++) w = Math.max(w, o[Math.min(o.length - 1, Math.max(0, t + d))] - Math.abs(d) * pen);
+      sc += w;
+    }
+    if (k && sc / Math.sqrt(k) > bestScore) { bestScore = sc / Math.sqrt(k); bestPhase = ph; }
+  }
+  const out = [];
+  for (let t = bestPhase; t < o.length; t += lag) {
+    let bi = t, bw = 0;
+    for (let d = -Math.round(lag * 0.22); d <= Math.round(lag * 0.22); d++) {
+      const i = Math.round(t) + d; if (i < 0 || i >= o.length) continue;
+      const w = o[i] - Math.abs(d) / lag;
+      if (w > bw) { bw = w; bi = i; }
+    }
+    out.push({ f: bi, t: P[bi].t, on: o[bi] });
+  }
+  return out;
+}
+function downbeats(bt) {
+  /* group into bars of 4 by summed onset strength: the strongest of the four candidate
+     rotations wins, which is how a human finds "one" without being told the time signature */
+  const L = 4, n = bt.length, sc = [0, 0, 0, 0];
+  for (let r = 0; r < L; r++) for (let i = r; i < n; i += L) sc[r] += bt[i].on;
+  let root = 0; for (let r = 1; r < L; r++) if (sc[r] > sc[root]) root = r;
+  return { root, bars: Math.ceil((n - root) / L) };
+}
+
+async function run() {
+  say('decoding…');
+  const file = 'Mili - world.execute (me) ;.mp3';
+  const ab = await (await fetch('/' + encodeURIComponent(file))).arrayBuffer();
+  const ac = new AudioContext({ sampleRate: SR });
+  const decoded = await ac.decodeAudioData(ab);
+  /* downmix properly: getChannelData already gives one channel per array, so pairing samples
+     inside it (the old mix()) silently threw away the second half of the song */
+  const ch = [];
+  for (let c = 0; c < decoded.numberOfChannels; c++) ch.push(decoded.getChannelData(c));
+  const mono = new Float32Array(decoded.length);
+  for (let i = 0; i < decoded.length; i++) { let s = 0; for (const d of ch) s += d[i]; mono[i] = s / ch.length; }
+  const x = resample(mono, decoded.sampleRate, SR);
+  ac.close();
+  say('framing…');
+  frames(x);
+  say('pitch…');
+  const f0 = new Float32Array(P.length), STRIDE = 4;   /* a note is >= 116 ms; 93 ms resolution is enough */
+  const f0s = new Float32Array(Math.ceil(P.length / STRIDE));
+  for (let i = 0; i < f0s.length; i++) {
+    const k = i * STRIDE;
+    f0s[i] = P[k] && P[k].rms > 0.02 ? f0at(x, k * HOP) : 0;
+    if (i % 200 === 0) { say('pitch… ' + Math.round(i / f0s.length * 100) + '%'); await new Promise((r) => setTimeout(r)); }
+  }
+  for (let i = 0; i < P.length; i++) f0[i] = f0s[Math.min(f0s.length - 1, Math.round(i / STRIDE))];
+  /* median-3 twice, then hysteresis into notes */
+  const sm = f0.slice();
+  for (let pass = 0; pass < 2; pass++) for (let i = 1; i < sm.length - 1; i++) {
+    const a = [f0[i - 1], f0[i], f0[i + 1]].sort((p, q) => p - q); sm[i] = a[1];
+  }
+  const notes = [];
+  let cur = null;
+  for (let i = 0; i < sm.length; i++) {
+    const v = sm[i];
+    if (v > 0) {
+      if (!cur) cur = { f0: v, f: i, t: P[i].t };
+      else cur.f0 = cur.f0 * 0.8 + v * 0.2;
+      cur.last = i;
+    } else if (cur && i - cur.last > 8) { if (cur.last - cur.f > 5) notes.push(cur); cur = null; }
+  }
+  if (cur) notes.push(cur);
+  say('harmony…');
+  const chr = [];
+  for (let i = 0; i < P.length; i += 4) chr.push({ f: i, t: P[i].t, c: chromaAt(x, i * HOP) });
+  const tp = tempo();
+  say('beats…');
+  const bt = beats(tp.bpm), db = downbeats(bt);
+  /* chord per bar, from the chroma frames that fall inside it */
+  const bars = [];
+  for (let b = 0, i = db.root; i < bt.length; b++, i += 4) {
+    const t0 = bt[Math.max(0, i - 2)].t, t1 = (bt[i + 2] || bt[bt.length - 1]).t;
+    const acc = new Float32Array(12); let n = 0;
+    for (const c of chr) if (c.t >= t0 && c.t < t1) { for (let k = 0; k < 12; k++) acc[k] += c.c[k]; n++; }
+    if (n) for (let k = 0; k < 12; k++) acc[k] /= n;
+    bars.push({ t: t0, t1, chord: chordOf(acc) });
+  }
+  const agg = new Float32Array(12);
+  for (const c of chr) for (let k = 0; k < 12; k++) agg[k] += c.c[k];
+  S.meta = { sr: SR, hop: HOP, frames: P.length, duration: P[P.length - 1].t,
+             bpm: +tp.bpm.toFixed(2), beatFrames: bt.length, barLen: 4, downbeatRoot: db.root, bars: bars.length };
+  S.beat = bt.map((b) => +b.t.toFixed(3));
+  S.beatOn = bt.map((b) => Math.round(b.on * 255));
+  let fmax = 0; for (const f of P) fmax = Math.max(fmax, f.flux);
+  S.flux = P.map((f) => Math.round(f.flux / fmax * 255));
+  S.rms = P.map((f) => Math.round(Math.min(1, f.rms * 2.2) * 255));
+  S.flat = P.map((f) => Math.round(Math.min(1, f.flat * 3) * 255));
+  S.f0 = Array.from(sm, (v) => Math.round(Math.min(1100, v) / 1100 * 255));
+  S.f0raw = Array.from(sm, (v) => +v.toFixed(1));
+  S.notes = notes.map((n) => ({ t: +n.t.toFixed(3), d: +((n.last - n.f) * HOPS).toFixed(3), hz: Math.round(n.f0),
+                                semi: Math.round(12 * Math.log2(n.f0 / 100)) }));
+  S.chroma = chr.map((c) => Array.from(c.c, (v) => Math.round(v * 255)));
+  S.bars = bars.map((b) => ({ t: +b.t.toFixed(3), name: b.chord.name, r: +b.chord.r.toFixed(3) }));
+  render();
+  return S;
+}
+
+function render() {
+  const H = [];
+  H.push('<h2>meter and tempo</h2><table><tr><th>tempo</th><th>beats</th><th>bars</th><th>bar length</th><th>downbeat phase</th></tr>');
+  H.push(`<tr><td>${S.meta.bpm} BPM</td><td>${S.meta.beatFrames}</td><td>${S.meta.bars}</td><td>${S.meta.barLen}</td><td>${S.meta.downbeatRoot}</td></tr></table>`);
+  H.push('<p>Sanity check against the lyric: the EXECUTION chant is 12 words at 0.94 s apart. Two beats '
+    + 'per word puts the tempo at ' + (60 / 0.47).toFixed(1) + ' BPM; one beat per word, '
+    + (60 / 0.94).toFixed(1) + '.</p>');
+  const loop = {};
+  for (const b of S.bars) loop[b.name] = (loop[b.name] || 0) + 1;
+  const top = Object.entries(loop).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  H.push('<h2>harmony</h2><table><tr><th>chord</th><th>bars</th></tr>');
+  for (const [k, v] of top) H.push(`<tr><td style="text-align:left">${k}</td><td>${v}</td></tr>`);
+  H.push('</table><pre>' + S.bars.slice(0, 48).map((b) => b.name.padEnd(4)).join(' ') + '</pre>');
+  const iv = {};
+  for (const n of S.notes) iv[((n.semi % 12) + 12) % 12] = (iv[((n.semi % 12) + 12) % 12] || 0) + 1;
+  H.push('<h2>melody</h2><p>' + S.notes.length + ' notes held longer than 116 ms. Pitch classes used '
+    + '(semitones from A): ' + Object.keys(iv).sort((a, b) => iv[b] - iv[a]).slice(0, 7).join(' ') + '</p>');
+  H.push('<pre>' + S.notes.slice(0, 60).map((n) => n.t.toFixed(2) + ':' + n.hz).join('  ') + '</pre>');
+  const cv = document.createElement('canvas'); cv.width = 1500; cv.height = 220;
+  const g = cv.getContext('2d'); g.fillStyle = '#11131a'; g.fillRect(0, 0, 1500, 220);
+  const dur = S.meta.duration;
+  g.strokeStyle = '#f9e2af'; g.lineWidth = 1.2; g.beginPath();
+  S.notes.forEach((n, i) => { const y = 210 - Math.min(1, Math.log2(n.hz / 60) / 4.2) * 200;
+    const x0 = n.t / dur * 1500; i ? g.lineTo(x0, y) : g.moveTo(x0, y); g.lineTo((n.t + n.d) / dur * 1500, y); });
+  g.stroke();
+  g.strokeStyle = '#45475a';
+  S.beat.forEach((t, i) => { const x = t / dur * 1500; g.beginPath(); g.moveTo(x, i % 4 === S.meta.downbeatRoot ? 0 : 12); g.lineTo(x, 220); g.stroke(); });
+  H.push('<h2>melody line, with the beat grid (bars heavier)</h2>');
+  el('out').innerHTML = H.join(''); el('out').appendChild(cv);
+  const blob = 'window.MUSIC=' + JSON.stringify(S) + ';';
+  el('out').insertAdjacentHTML('beforeend', '<h2>export</h2><p>copy this to mv/music.data.js:</p><pre id="ex">'
+    + blob.slice(0, 400) + '… (' + blob.length + ' bytes)</pre>');
+  window.__music = blob;
+  say('done');
+}
+</script>
+</body>
+</html>
