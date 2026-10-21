@@ -28,10 +28,14 @@ analysis/verify-120fps.png      全片 25,429 帧的亮度/饱和度/运动量/�
 analysis/sheet-a.jpg            0–105 秒每秒一格的接触表
 analysis/sheet-b.jpg            106–211 秒每秒一格的接触表
 analysis/frame-star.jpg         1920×1080 真渲染定点证据：星型拓扑断第一臂（111.5 s）
-analysis/frame-isolation.jpg    ^ 六臂全断的 hub（118 s）
+analysis/frame-isolation.jpg    ^ 六臂全断的 hub，旋律线从纸后穿过（118 s）
 analysis/frame-cage.jpg         ^ 铁栏落在纸后、光标停在心上（72 s）
 analysis/frame-killqueue.jpg    ^ 一排节点依次划叉、只剩 me→you（163 s）
 analysis/frame-limit.jpg        ^ 极限曲线与收成心的铁栏（190 s）
+analysis/frame-circumference.jpg ^ CIRCUMFERENCE 从光里擦出来，实测音高的旋律线（36.9 s）
+analysis/frame-satisfaction.jpg  ^ SATISFACTION 与心上停留的光标（65.9 s）
+analysis/frame-verse-blue.jpg    ^ 主歌的普鲁士蓝三色板（33 s）
+analysis/frame-chorus-gold.jpg   ^ 副歌的黑/朱红/金三色板（63 s）
 analysis/look-grid.jpg          新方向下 32 帧全尺寸定点图，用来读清接触表里看不清的细节
 analysis/style-a.jpg            换方向前渲染的三张风格样片（选了 A）
 analysis/style-b.jpg            ^
