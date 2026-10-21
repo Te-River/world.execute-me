@@ -28,9 +28,16 @@
 (() => {
 'use strict';
 
-const FPS = 60, RW = 120, RH = 68;      // the readout window: the frame, downsampled
+const RATE = 60, RW = 120, RH = 68;     // default sampling rate; the readout window size
 const COLS = 8, CW = 200, CH = 113;     // contact-sheet cell grid, one cell per second
 const LIMITS = { dark: 8, blown: 247, motionJump: 70, panJump: 26 };
+/* A flicker is not "the picture moved". It is motion that arrives as an isolated spike:
+   one or two frames of change, then nothing, again and again — an element appearing,
+   vanishing, or being re-driven by a value that only updates at the analysis hop rate.
+   Smooth animation produces runs of change, not spikes, so the shape of the signal
+   separates them. Sampling has to be finer than the display to see it at all: at 60 fps a
+   one-frame pulse is either missed or looks like a cut. */
+const FLICKER = { over: 7, under: 3, run: 2 };
 
 let S = null;
 
@@ -49,11 +56,12 @@ function sheet(rows) {
   return c;
 }
 
-function start() {
+function start(rate) {
+  rate = rate || RATE;
   const track = document.getElementById('track');
   track.pause();
   document.getElementById('start').classList.add('off');
-  const DUR = window.SCORE.meta.duration, N = Math.ceil(DUR * FPS);
+  const DUR = window.SCORE.meta.duration, N = Math.ceil(DUR * rate);
   const [stage, ox, oy, dw, dh] = fitRect();
   const rc = document.createElement('canvas'); rc.width = RW; rc.height = RH;
   const rg = rc.getContext('2d', { willReadFrequently: true });
@@ -62,7 +70,7 @@ function start() {
   const secs = Math.ceil(DUR);
 
   S = {
-    N, DUR, n: 0, done: false, t0: performance.now(), flags: [],
+    N, DUR, rate, n: 0, done: false, t0: performance.now(), flags: [],
     lum: new Uint8Array(N), sat: new Uint8Array(N), dif: new Uint8Array(N), det: new Uint8Array(N),
     pdx: new Uint8Array(N), pdy: new Uint8Array(N), cz: new Float32Array(N),
     sheetA: sheet(Math.min(14, Math.ceil(106 / COLS))), sheetB: sheet(14)
@@ -78,9 +86,9 @@ function start() {
   }
 
   function frame(f) {
-    const t = f / FPS;
+    const t = f / rate;
     window.MV.pin(t);
-    window.MV.step(f * 1000 / FPS);
+    window.MV.step(f * 1000 / rate);
     const c = window.MV.cam(t);
     S.cz[f] = c.z;
     if (f > 0) {
@@ -114,7 +122,7 @@ function start() {
     S.dif[f] = Math.min(255, Math.round(dif / npx / 3));
     S.det[f] = Math.min(255, Math.round(grad / gn * 8));
     const k = Math.floor(t);
-    if (f % FPS === 0 && k < secs) cell(k < 106 ? S.sheetA : S.sheetB, k < 106 ? k : k - 106, k);
+    if (f % rate === 0 && k < secs) cell(k < 106 ? S.sheetA : S.sheetB, k < 106 ? k : k - 106, k);
   }
 
   let f = 0;
@@ -132,7 +140,7 @@ function start() {
     else ch.port2.postMessage(0);
   };
   ch.port2.postMessage(0);
-  return { frames: N, fps: FPS, seconds: +DUR.toFixed(2) };
+  return { frames: N, fps: rate, seconds: +DUR.toFixed(2) };
 }
 
 function status() {
@@ -141,7 +149,7 @@ function status() {
 }
 
 function stats() {
-  const ACTS = window.STORY.acts, N = S.N;
+  const ACTS = window.STORY.acts, N = S.N, rate = S.rate;
   const flags = S.flags.slice();
   for (let f = 1; f < N; f++) {
     const pan = S.pdx[f] + S.pdy[f];
@@ -152,7 +160,7 @@ function stats() {
   }
   flags.sort((a, b) => a[0] - b[0]);
   const perAct = ACTS.map((a) => {
-    const f0 = Math.round(a.from * FPS), f1 = Math.min(N, Math.round(a.to * FPS));
+    const f0 = Math.round(a.from * rate), f1 = Math.min(N, Math.round(a.to * rate));
     let dm = 0, dp = 0, dt = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255;
     const ds = [];
     for (let f = f0; f < f1; f++) {
@@ -166,7 +174,53 @@ function stats() {
              detail: +(dt / n).toFixed(1),
              pan: +(dp / n).toFixed(1), panMax: pmax, minLum: lmin, minSat: smin };
   });
-  return { flags, perAct };
+  return { flags, perAct, fl: flickers() };
+}
+
+/* Isolated spikes: one or two frames of change with silence on both sides. That is what a
+   flicker looks like in the signal, but a spike on its own is not yet a bug — a cut is also a
+   spike — so each one is attributed before it is counted:
+     dissolve   within 1.5 s of a scene join, i.e. inside the cross-fade window (max 1.15 s)
+     hard-cut   inside a scene that declares cut:true, which is the chant's editing grammar
+     FLASH      anywhere else: an element that appears, disappears or is re-driven mid-shot
+   Only FLASH counts against the film. The run-length test already rejects ordinary animation,
+   which changes for many consecutive frames. */
+function flickers() {
+  const N = S.N, rate = S.rate, SCENES = window.SCENES, out = [];
+  for (let f = 1; f < N - 2; f++) {
+    if (S.dif[f] <= FLICKER.over) continue;
+    let a = f, b = f;
+    while (a > 1 && S.dif[a - 1] > FLICKER.over) a--;
+    while (b < N - 3 && S.dif[b + 1] > FLICKER.over) b++;
+    if (b - a + 1 > FLICKER.run) { f = b; continue; }
+    if (S.dif[a - 1] > FLICKER.under || S.dif[b + 1] > FLICKER.under) { f = b; continue; }
+    const t = a / rate;
+    const sc = SCENES.find((s) => t >= s.from && t < s.to);
+    const cause = sc && sc.cut ? 'hard-cut'
+      : SCENES.some((s) => Math.abs(t - s.from) < 1.5) ? 'dissolve' : 'FLASH';
+    out.push({ f: a, t: +t.toFixed(3), run: b - a + 1, peak: S.dif[a],
+               scene: sc ? sc.id : '-', cause: cause });
+    f = b + 1;
+  }
+  return out;
+}
+
+/* A frame at print resolution. The in-app viewport is only 638 px wide, so the stage's
+   backing store has to be asked for explicitly: set the CSS box, let mv.js's resize()
+   recompute it from devicePixelRatio, and the 16:9 design space then fills 2400x1350. */
+async function shot(t, name) {
+  const cv = document.getElementById('stage'), prevStyle = cv.getAttribute('style') || '';
+  cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
+  dispatchEvent(new Event('resize'));
+  window.MV.pin(t);
+  window.MV.step(t * 1000);
+  const px = [cv.width, cv.height];
+  const jpg = /\.jpe?g$/i.test(name);
+  const blob = await new Promise((r) => cv.toBlob(r, jpg ? 'image/jpeg' : 'image/png', 0.94));
+  await fetch('/save-' + name, { method: 'POST', body: blob });
+  cv.setAttribute('style', prevStyle);
+  dispatchEvent(new Event('resize'));
+  return { name: name, px: px, bytes: blob.size };
 }
 
 function chart(W, H) {
@@ -224,14 +278,19 @@ async function post(name, canvas, type, q) {
 }
 
 async function report() {
-  const { flags, perAct } = stats();
+  const { flags, perAct, fl } = stats();
+  const chartName = 'verify-' + S.rate + 'fps.png';
   const sizes = {
-    'verify-60fps.png': await post('verify-60fps.png', chart(1600, 800), 'image/png'),
+    [chartName]: await post(chartName, chart(1600, 800), 'image/png'),
     'sheet-a.jpg': await post('sheet-a.jpg', S.sheetA, 'image/jpeg', 0.86),
     'sheet-b.jpg': await post('sheet-b.jpg', S.sheetB, 'image/jpeg', 0.86)
   };
-  return JSON.stringify({ frames: S.N, fps: FPS, seconds: +S.DUR.toFixed(2),
-                          flags: flags.length, flagSample: flags.slice(0, 30), perAct, sizes });
+  return JSON.stringify({ frames: S.N, fps: S.rate, seconds: +S.DUR.toFixed(2),
+    flags: flags.length, spikes: fl.length,
+    byCause: fl.reduce((m, x) => { const c = (m[x.cause] = m[x.cause] || { n: 0, max: 0 });
+      c.n++; c.max = Math.max(c.max, x.peak); return m; }, {}),
+    flashes: fl.filter((x) => x.cause === 'FLASH'),
+    perAct, sizes });
 }
 
 /* What the recording is actually made of, per 10 s: the share of energy above ~2 kHz
@@ -265,6 +324,6 @@ async function report() {
   return out;
 }
 
-window.VERIFY = { start, status, stats, report, timbre };
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot };
 return 'VERIFY ready';
 })();

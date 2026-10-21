@@ -464,8 +464,22 @@ function frame(ts) {
   try { render(ts); } catch (e) { warn('render halted: ' + (e && e.message || e)); return; }
   if (playing || !track.paused) schedule();
 }
+/* The dissolve length must not depend on the live envelope. When the mix got louder while a
+   dissolve was running, the window shrank, the condition went false mid-way, and the
+   incoming shot snapped back out — the 120 fps sweep caught exactly that as one-frame
+   spikes at 131.22, 177.24, 193 and 205.82 s. Sample the loudness at the join instead, so
+   the window is fixed from the moment it opens. */
+function dissolveLen(at) {
+  const i = Math.min(NF - 1, Math.max(0, Math.round(at / HOP)));
+  return lerp(1.15, 0.45, clamp01(V.rms[i] * 1.25));
+}
+
 function render(ts) {
-  const wall = lastTs ? (ts - lastTs) / 1000 : 0.016;
+  /* The clock can go backwards — a seek, or the harness pinning a frame — and a negative
+     delta poisons the exponential smoothers: exp(-dt/τ) overflows to Infinity, the palette
+     lerp becomes ±Infinity, and the vignette then asks for rgba(0,0,0,Infinity) and throws,
+     which takes the whole frame with it. The 120 fps sweep found this by scrubbing. */
+  const wall = lastTs ? Math.max(0, (ts - lastTs) / 1000) : 0.016;
   const dt = Math.min(0.05, wall); lastTs = ts;
   if (!W) resize();
   const t = clock();
@@ -477,7 +491,7 @@ function render(ts) {
   if (idx < 0) idx = SCENES.length - 1;
   const cam = cameraFor(t);
   const nxt = SCENES[idx + 1];
-  const dis = lerp(1.15, 0.45, clamp01(env * 1.25));      /* the chorus joins tighter than the intro */
+  const dis = dissolveLen(nxt ? nxt.from : t);      /* the chorus joins tighter than the intro */
   if (nxt && nxt.from - t < dis) {
     const a = clamp01((t - (nxt.from - dis)) / dis);
     renderScene(bx, idx, t, cam);

@@ -28,7 +28,7 @@ window.STORY = {
     boot:      { room0: '#070a0e', room1: '#111820', page: '#eef2f6', ink: '#1d2833', accent: '#b3263a', rim: '#cfe0f0', glow: '#9fc0e2', lum: 0.62 },
     /* the title card inside the globe: warmer, softer, the lamp has settled */
     interlude: { room0: '#080b10', room1: '#151d27', page: '#f2f1ea', ink: '#20272f', accent: '#b3263a', rim: '#d8e4ef', glow: '#a8c2da', lum: 0.68 },
-    /* she is writing: the brightest, most neutral reading light of the film */
+    /* the instance is writing: the brightest, most neutral reading light of the film */
     verse:     { room0: '#0a0d11', room1: '#18202a', page: '#f6f7f4', ink: '#1b242c', accent: '#a81f38', rim: '#e2ecf5', glow: '#b8cfe4', lum: 0.74 },
     /* the chorus: over-exposed, the light spills, the halo widens */
     chorus:    { room0: '#0c0e12', room1: '#1d232b', page: '#fbf6ee', ink: '#22262c', accent: '#d81b43', rim: '#f0e6df', glow: '#d8b8ac', lum: 0.86 },
