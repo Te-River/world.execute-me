@@ -253,24 +253,10 @@ function room(g, col, F, t, L, o) {
   beam.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = beam; g.fillRect(0, 0, DW, DH);
   g.restore();
-  /* the floor is a plane with a vanishing point, not a line. Head-on, one horizontal rule made
-     every shot the same flat stage; giving the ground a horizon lets the page and the node stand
-     at different distances from the lens, which is what the room has been missing. */
-  const hy = DH * 0.5, vpx = DW * 0.5;
-  g.strokeStyle = rgba(warm, 0.16 + col.lum * 0.13); g.lineWidth = 1.2;
-  for (let i = 1; i <= 13; i++) {
-    const u = i / 13, y = hy + (DH - hy) * u * u;
-    g.globalAlpha = u * u; G.line(g, 0, y, DW, y);
-  }
-  for (let i = -6; i <= 6; i++) {
-    /* the fan lines are the room's only straight perspective, so they have to stop short of the
-       frame edge — drawn full length they wireframe the whole picture and out-shout the diagram */
-    const run = i * DW * 0.19;
-    g.globalAlpha = 0.3 * (1 - Math.abs(i) / 7);
-    G.line(g, vpx, hy, vpx + run * 0.62, DH * 0.94);
-  }
-  g.globalAlpha = 1;
-  /* the sheet's light on the ground, and the shadow it casts back into */
+  /* the ground itself belongs to mv.js's hall, which is drawn in screen space so it can disagree
+     with the sheet about how the camera moved. What stays here is the paper's **own** light on the
+     floor, and the shadow under it — those travel with the sheet, which is what makes it an object
+     standing in that room rather than a card in front of a backdrop. */
   const base = Math.min(DH - 6, L.y + L.h);
   g.save(); g.globalCompositeOperation = 'lighter';
   const pool = g.createRadialGradient(cx, base, 0, cx, base, L.w * 1.1);
@@ -288,10 +274,6 @@ function room(g, col, F, t, L, o) {
   g.translate(cx, base); g.scale(1, 0.16); g.translate(-cx, -base);
   g.fillRect(cx - L.w * 0.62, base - L.w * 0.62, L.w * 1.24, L.w * 1.24);
   g.restore();
-  /* the far wall: the light dies before it reaches the top of the room */
-  const wall = g.createLinearGradient(0, 0, 0, hy);
-  wall.addColorStop(0, rgba(col.room0, 0.85)); wall.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = wall; g.fillRect(0, 0, DW, hy);
 }
 
 function page(g, col, L, o) {
@@ -310,7 +292,7 @@ function page(g, col, L, o) {
   const turn = side * 0.05 + (seed - 0.5) * 0.085 + (L.h / L.w - 0.55) * 0.04;
   const lean = -0.03 - side * 0.05 + (seed - 0.5) * 0.05;
   g.translate(mcx, mcy); g.transform(1, lean, 0, 1, 0, 0); g.rotate(turn);
-  g.scale(0.84, 0.9); g.translate(-mcx, -mcy);
+  g.scale(0.76, 0.84); g.translate(-mcx, -mcy);
   /* the cast bloom: a blurred copy of the sheet lying behind it */
   g.save(); g.filter = `blur(${o.blur === undefined ? 26 : o.blur}px)`;
   g.fillStyle = rgba(col.page, 0.15 + col.lum * 0.11);
@@ -323,6 +305,13 @@ function page(g, col, L, o) {
   pg.addColorStop(0.34, tint(col.page, col.glow, 0.26));
   pg.addColorStop(1, tint(col.page, col.room0, 0.74));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
+  /* the sheet is ruled. Since the board got smaller, shots whose diagram is two letters and a
+     line showed the paper as a blank grey card; a faint rule says "this is a page" without
+     adding anything that competes with the ink drawn on it */
+  g.strokeStyle = rgba(INK, 0.075); g.lineWidth = 1;
+  for (let y = L.y + L.h / 16; y < L.y + L.h; y += L.h / 16) G.line(g, L.x, y, L.x + L.w, y);
+  g.strokeStyle = rgba(ACC, 0.16); g.lineWidth = 1;
+  G.line(g, L.x + L.w * 0.055, L.y, L.x + L.w * 0.055, L.y + L.h);
   if (o.rule !== false) { g.fillStyle = rgba(ACC, 0.8); g.fillRect(L.x, L.y, 3, L.h); }
   g.save();
   g.beginPath(); g.rect(L.x, L.y, L.w, L.h); g.clip();
@@ -882,11 +871,17 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
        floor-pool of its own — otherwise "heap quiet" reads as an empty frame, not as a survivor */
     const px = DW * 0.56, py = GY - 20;
     g.save(); g.globalCompositeOperation = 'lighter';
-    const pool = g.createRadialGradient(px, py, 0, px, py, 190);
-    pool.addColorStop(0, rgba(RIM, 0.1 + F[8] * 0.06)); pool.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = pool; g.fillRect(px - 190, py - 190, 380, 380);
+    /* the pool is the last lamp in the film, so it has to light something: squashed onto the floor
+       plane and bright enough to rim the kneeling node, or "heap quiet" is just a black cell */
+    const pool = g.createRadialGradient(px, py, 0, px, py, 300);
+    pool.addColorStop(0, rgba(RIM, 0.26 + F[8] * 0.12));
+    pool.addColorStop(0.4, rgba(RIM, 0.09));
+    pool.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = pool;
+    g.translate(px, py); g.scale(1, 0.3); g.translate(-px, -py);
+    g.fillRect(px - 300, py - 300, 600, 600);
     g.restore();
-    G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, F[8] * 0.18);
+    G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, 0.4 + F[8] * 0.3);
     /* the caret still blinks — nobody is typing — but it breathes rather than switching,
        so a half-second gate cannot read as a one-frame flash */
     g.fillStyle = rgba(RIM, 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(t * 3.1)));

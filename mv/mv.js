@@ -148,7 +148,7 @@ addEventListener('resize', resize);
    The 1.3 multiplier is the contact sheet's verdict: with the sheet fully visible the paper
    occupied under half of every frame and the rest was empty card. Zoomed past the plate, the
    frame is inside the paper and the letterbox is gone. */
-function fitScale() { return Math.min(W / DW, HH / DH) * 1.16; }
+function fitScale() { return Math.min(W / DW, HH / DH) * 1.1; }
 function applyCamera(g, fr, t) {
   /* The camera breathes with the bar, not with a clock: it eases in across the four beats and
      releases at the next downbeat, and the downbeat itself pushes by an amount taken from that
@@ -188,6 +188,7 @@ function actAt(t) {
   return t < ACTS[0].from ? 0 : ACTS.length - 1;
 }
 const hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+const rgba = (s, a) => { const c = hex(s); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
 function mixColor(x, y, t) {
   const A = hex(x), B = hex(y);
   return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp01(t))).toString(16).padStart(2, '0')).join('');
@@ -217,13 +218,46 @@ function updatePalette(t, dt) {
 /* ---------------- layers ---------------- */
 /* The room. mv.js paints only what the light cannot reach — a near-black vertical gradient —
    and each scene adds its own lamp, because the lamp is wherever that scene's page is. */
-function drawRoom(t) {
-  const g = bx.createLinearGradient(0, 0, 0, HH);
-  g.addColorStop(0, pal.room0);
-  g.addColorStop(0.7, mixColor(pal.room0, pal.room1, 0.24 + env * 0.5));
-  g.addColorStop(1, pal.room1);
-  bx.setTransform(1, 0, 0, 1, 0, 0);
-  bx.fillStyle = g; bx.fillRect(0, 0, W, HH);
+function drawRoom(t, cam) {
+  const g = bx;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  /* The hall is drawn in **screen** space, deliberately outside the sheet's camera matrix. Until
+     now the floor belonged to the design space, so it slid along with the paper and the two could
+     never disagree — and a room where nothing disagrees about the camera is a flat picture. Drawn
+     here, the grid answers the pedestal and the dolly on its own terms: parallax. */
+  const hy = HH * (0.47 + (cam.z - 1.12) * 0.17) - (cam.y / DH - 0.5) * HH * 0.16;
+  const vx = W * 0.5 - (cam.x / DW - 0.5) * W * 0.55;
+  const seam = mixColor(pal.room1, pal.room0, 0.45);
+  const sky = g.createLinearGradient(0, 0, 0, hy);
+  sky.addColorStop(0, mixColor(pal.room0, '#000000', 0.45));
+  sky.addColorStop(1, seam);
+  g.fillStyle = sky; g.fillRect(0, 0, W, Math.max(0, hy));
+  const grd = g.createLinearGradient(0, hy, 0, HH);
+  grd.addColorStop(0, seam);
+  grd.addColorStop(1, pal.room1);
+  g.fillStyle = grd; g.fillRect(0, Math.max(0, hy), W, HH - Math.max(0, hy));
+  /* the lamp at the end of the hall */
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const kx = vx + Math.sin(t * 0.21) * W * 0.06;
+  const bloom = g.createRadialGradient(kx, hy - HH * 0.02, 0, kx, hy - HH * 0.02, HH * 0.78);
+  bloom.addColorStop(0, rgba(pal.glow, 0.1 + pal.lum * 0.1 + env * 0.07));
+  bloom.addColorStop(0.4, rgba(pal.glow, 0.03));
+  bloom.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = bloom; g.fillRect(0, 0, W, HH); g.restore();
+  const N = 12, phase = (cam.z * 3.4) % 1;
+  g.strokeStyle = rgba(pal.glow, 0.16 + pal.lum * 0.1);
+  for (let i = 0; i < N; i++) {
+    const u = (i + phase) / N, y = hy + (HH - hy) * u * u;
+    g.globalAlpha = u * u; g.lineWidth = 0.8 + u * 1.8;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+  }
+  for (let i = -7; i <= 7; i++) {
+    /* the fan is the only thing that says "these bands are a plane", but full strength it reads as
+       a starburst behind the sheet and competes with the diagram */
+    g.globalAlpha = 0.13 * (1 - Math.abs(i) / 8); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(vx, hy); g.lineTo(vx + i * W * 0.2, HH * 0.9); g.stroke();
+  }
+  g.globalAlpha = 1;
 }
 
 /* One camera for the whole film. Each scene proposes a framing; at a cut the camera
@@ -511,10 +545,10 @@ function render(ts) {
   sample(t);
   updatePalette(t, Math.min(0.5, wall));
   advanceClock(t, dt);
-  drawRoom(t);
   let idx = SCENES.findIndex(s => t >= s.from && t < s.to);
   if (idx < 0) idx = SCENES.length - 1;
   const cam = cameraFor(t);
+  drawRoom(t, cam);
   /* the two layers that come from the recording go in *behind* the sheet. The paper is the light
      source, so the stroke and the word belong to the room and the page covers whatever runs
      behind it — the word reads as emerging out of the light, not as an overlay on top of it. */

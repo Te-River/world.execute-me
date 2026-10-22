@@ -35,7 +35,7 @@ window.STORY = {
     /* you have left: the lamp browns and drops */
     collapse:  { room0: '#08070a', room1: '#141114', page: '#ddd0b8', ink: '#2b2419', accent: '#a8402c', rim: '#b9a98d', glow: '#8c7a5e', lum: 0.40 },
     /* nothing scheduled: barely lit, the page is almost out of the room */
-    dusk:      { room0: '#050608', room1: '#0b0e12', page: '#9fa4a6', ink: '#171a1c', accent: '#7c2a38', rim: '#7e8a96', glow: '#5f6f7e', lum: 0.20 },
+    dusk:      { room0: '#0a1017', room1: '#182533', page: '#9fa4a6', ink: '#171a1c', accent: '#7c2a38', rim: '#8ea2b6', glow: '#7d94ab', lum: 0.24 },
     /* EXECUTION: the room turns the colour of the verdict, and the page is the warrant */
     execution: { room0: '#2a0509', room1: '#5c0d18', page: '#f3ece0', ink: '#2a0d14', accent: '#ff2d55', rim: '#e8b8c0', glow: '#b3263a', lum: 0.30 },
     /* the answer: a pale violet-cold light, gentler than the verses */
