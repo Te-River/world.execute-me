@@ -304,7 +304,12 @@ function cameraFor(t) {
     camState.y += (f.y - camState.y) * a;
   }
   camStateT = t;
-  lastCam = { z: camState.z, x: camState.x, y: camState.y, shake: f.shake };
+  /* One slow lateral sweep per eight bars. The hall answers cam.x at 0.55x and the sheet at 1x, so
+     the two slide past each other while nothing inside either one moves — that disagreement is the
+     difference between a set and a room. Applied after the smoothing state, never fed back into it,
+     or the drift would compound itself. */
+  const drift = window.MUSIC ? Math.sin(t * Math.PI * 2 / (32 * 60 / window.MUSIC.meta.bpm)) * DW * 0.055 : 0;
+  lastCam = { z: camState.z, x: camState.x + drift, y: camState.y, shake: f.shake };
   return lastCam;
 }
 

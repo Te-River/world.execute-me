@@ -597,8 +597,10 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     room(g, col, F, t, L, { reach: 1.9 });
     if (t > 70.08) {                                         /* we are trapped — behind the sheet */
       const u = oback(seg(t, 70.08, 73.6));
-      g.strokeStyle = rgba(ACC, 0.85); g.lineWidth = 6;
-      G.cage(g, DW * 0.5, DH * 0.06 - (1 - u) * 300, GY + 20, DW * 0.62, 7);
+      /* sized to the sheet, not to the room: spanning the full frame height it read as a red fence
+         planted in front of the picture, which is the opposite of the line being sung */
+      g.strokeStyle = rgba(ACC, 0.72); g.lineWidth = 5;
+      G.cage(g, L.x + L.w / 2, L.y - 40 - (1 - u) * 180, L.y + L.h + 22, L.w * 1.34, 5);
     }
     page(g, col, L, { blur: 34 });
     const gu = seg(t, 59.22, 65.39);
