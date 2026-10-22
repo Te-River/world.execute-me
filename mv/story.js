@@ -29,9 +29,9 @@ window.STORY = {
     /* the title card inside the globe: warmer, softer, the lamp has settled */    interlude: { room0: '#080b10', room1: '#151d27', page: '#f2f1ea', ink: '#20272f', accent: '#b3263a', rim: '#d8e4ef', glow: '#a8c2da', lum: 0.68 },
     /* the instance is writing: the brightest, most neutral reading light of the film */
     /* the verses: a Prussian-blue night, one blue plus the ink and the one red */
-    verse:     { room0: '#040910', room1: '#0d1b2b', page: '#e2ecf5', ink: '#132131', accent: '#b3263a', rim: '#bcd8ee', glow: '#6fa0cc', lum: 0.74 },
+    verse:     { room0: '#03080f', room1: '#0a1c31', page: '#cfe1f4', ink: '#132131', accent: '#b3263a', rim: '#a8cdec', glow: '#4f8cc8', lum: 0.74 },
     /* the chorus: black, vermilion and gold — the same three-plate discipline, warmer */
-    chorus:    { room0: '#0d0708', room1: '#251318', page: '#f8ecd6', ink: '#2a1c14', accent: '#e0344f', rim: '#f2dcc0', glow: '#e0a86a', lum: 0.86 },
+    chorus:    { room0: '#0d0708', room1: '#2b1610', page: '#f9e3bd', ink: '#2a1c14', accent: '#e0344f', rim: '#f0cfa0', glow: '#d98b34', lum: 0.86 },
     /* you have left: the lamp browns and drops */
     collapse:  { room0: '#08070a', room1: '#141114', page: '#ddd0b8', ink: '#2b2419', accent: '#a8402c', rim: '#b9a98d', glow: '#8c7a5e', lum: 0.40 },
     /* nothing scheduled: barely lit, the page is almost out of the room */
@@ -39,7 +39,7 @@ window.STORY = {
     /* EXECUTION: the room turns the colour of the verdict, and the page is the warrant */
     execution: { room0: '#0b0305', room1: '#210810', page: '#f3ece0', ink: '#2a0d14', accent: '#ff2d55', rim: '#e8b8c0', glow: '#b3263a', lum: 0.30 },
     /* the answer: a pale violet-cold light, gentler than the verses */
-    reveal:    { room0: '#07070f', room1: '#161628', page: '#eef0f8', ink: '#1e2030', accent: '#c02a44', rim: '#d5daf2', glow: '#9aa4d8', lum: 0.70 },
+    reveal:    { room0: '#07070f', room1: '#181a33', page: '#e3e4f8', ink: '#1e2030', accent: '#c02a44', rim: '#c6cbee', glow: '#7f88d6', lum: 0.70 },
     /* the light going out of the room */
     outro:     { room0: '#030406', room1: '#080b0f', page: '#7d8790', ink: '#12161a', accent: '#7a2230', rim: '#5d6a76', glow: '#46525e', lum: 0.12 }
   },

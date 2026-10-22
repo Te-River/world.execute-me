@@ -85,7 +85,7 @@ function shapeBlend(u) {
 
 /* ---------------- the melody stroke ---------------- */
 function melody(g, t, W, H, pal, camZ) {
-  const rail = H * 0.665, span = H * 0.30;
+  const rail = H * 0.665, span = H * 0.215;
   const xOf = (u) => (u - (t - LOOK)) / LOOK * W * HEAD;
   const yOf = (hz) => rail - clamp(Math.log2(Math.max(LO, hz) / LO) / Math.log2(HI / LO), 0, 1) * span;
   const step = LOOK / 900;
@@ -172,9 +172,12 @@ function hooks(LYRICS) {
   if (HOOKS) return HOOKS;
   HOOKS = [];
   LYRICS.forEach((l, i) => {
-    if (!/^[A-Z0-9 .!?-]+$/.test(l.en) || l.en.length < 4) return;
+    /* the ALL-CAPS hooks, plus the title line: sung at 16 s over the only shot that has no
+       diagram of its own, which is exactly where a display line belongs */
+    const title = l.en.indexOf('world.execute') >= 0;
+    if (!title && (!/^[A-Z0-9 .!?-]+$/.test(l.en) || l.en.length < 4)) return;
     const nxt = LYRICS[i + 1];
-    HOOKS.push({ w: l.en, from: l.at, to: nxt ? Math.min(nxt.at, l.at + 3.4) : l.at + 3.4, cn: l.cn });
+    HOOKS.push({ w: l.en, from: l.at, to: nxt ? Math.min(nxt.at, l.at + (title ? 5.4 : 3.4)) : l.at + 3.4, cn: l.cn });
   });
   return HOOKS;
 }

@@ -23,6 +23,7 @@ mv/score.data.js                生成的音色层数据（window.SCORE），不
 mv/music.data.js                生成的音乐层数据（window.MUSIC）：节拍网格、逐拍力度、旋律轮廓
 analysis/analyze.html           音色分析管线，可在浏览器里打开复现
 analysis/music.html             音乐分析管线：节拍/小节/重拍、和声尝试、旋律音符
+analysis/serve.mjs              本地服务：支持 byte-range（音频 seek 要用）且能收 POST（证据图存盘）
 analysis/verify.js              逐帧校验台：按 60/120 fps 扫全片、量画面、判闪现、出图
 analysis/verify-120fps.png      全片 25,429 帧的亮度/饱和度/运动量/运镜速率/细节密度曲线
 analysis/sheet-a.jpg            0–105 秒每秒一格的接触表
@@ -39,6 +40,7 @@ analysis/frame-chorus-gold.jpg   ^ 副歌的黑/朱红/金三色板（63 s）
 analysis/frame-flat-line.jpg     ^ 拖长的 LO-O-OVE 里，旋律线压平成渐近线（189 s）
 analysis/frame-loop.jpg          ^ SIMULATION：线闭合成一圈（15 s）
 analysis/frame-bars.jpg          ^ EXECUTION：线折成栅栏（150 s）
+analysis/frame-title-globe.jpg  ^ 片名作为大字擦出、被点亮的球（18 s）
 analysis/look-grid.jpg          新方向下 32 帧全尺寸定点图，用来读清接触表里看不清的细节
 analysis/style-a.jpg            换方向前渲染的三张风格样片（选了 A）
 analysis/style-b.jpg            ^
@@ -212,13 +214,26 @@ DISHEARTENED 处错放了 ILLEGAL ARGUMENTS 对话框（早 6.3 秒）。现在�
 5. **强拍的推法有包络**：起拍那一瞬不是瞬间到位，而是 60 ms 起音、220 ms 释放。
    之前它是阶跃的，全扫里最后一个未归因尖峰（50.158 秒）就是它。
 
+### 联系表才看得见的四个毛病
+
+定点图一张张都过得去，把 0–105 秒按每秒一格拼成一张联系表来看，才看见四个全片层面的问题：
+
+| 毛病 | 在联系表上的样子 | 改法 |
+| --- | --- | --- |
+| 16–29 秒是死场 | 连续 14 格几乎同一幅画：一个灰盘子里一个点 | 那颗球本来是"被递过来的小世界"，但它是**灰的**——这间屋子的前提是只有纸会发光，一颗不亮的球读起来像灯被关了。把球面提亮（与房间色只混 16%），并把片名 `world.execute (me) ;` 作为大字在 16 秒起擦出（大字窗口对片名行放宽到 5.4 秒） |
+| 六套色板看不出来 | 主歌与副歌在缩略尺度上是同一种白 | 病根在 `page()`：纸面渐变顶部**向白色混了 35%**，把整块色板洗掉了。降到 16%，底部向灯色混到 34%；同时把三块主要色板推深（主歌普鲁士蓝 page `#cfe1f4`、副歌黑朱红金 page `#f9e3bd`、揭示段淡紫 page `#e3e4f8`） |
+| 旋律线在琶音段读成栅栏 | 0–16 秒两侧一片竖直方波 | 纵向跨度从 0.30 屏高压到 0.215， contour 还在，但不再像围栏 |
+| 副歌 59–66 秒太薄 | 一张发白的纸上只有一个很小的心 | 涟漪本来挂在 61.95（STIMULATIONS 那个词），提前到 59.68（"If I can give you all the" 一开口就开始），副歌入口不再空转 |
+
+改完全片重扫：细节密度 40.8 → **38.0**，运动均值 0.84 → **0.70**——四个毛病里有两个本来就是"太挤/太闹"。
+
 ### 这一轮之后的逐帧结果
 
 同一构建重扫 25,429 帧（120 fps）：**0 黑帧、0 爆白、0 抛异常**；25 个孤立尖峰里 12 个是溶解窗口、
-13 个在声明了 `cut: true` 的诵唱段，**未归因的闪现：0 个**。全片最低亮度 13（片尾熄灯），
-各幕平均运动 0.6–1.1（全片均值 0.84）、峰值最高仍在诵唱段（54）。
+13 个在声明了 `cut: true` 的诵唱段，**未归因的闪现：0 个**。全片最低亮度 12（片尾熄灯），
+各幕平均运动 0.5–1.1（全片均值 0.70）、峰值最高仍在诵唱段（52）。
 
-代价要算清楚：细节密度（画面平均梯度）从上一轮的 33.1 涨到 **40.8**，帧间运动平均从 0.2 涨到 0.84。
+代价要算清楚：细节密度（画面平均梯度）从上一轮的 33.1 涨到 **38.0**，帧间运动平均从 0.2 涨到 0.70。
 这是故意的——多出来的两层不是道具，是录音本身（一条旋律线、一个正在被唱的词）。
 它们和"14 栋房子加 5 根电线杆"的区别在于：前者只有两个元素且都跟着音乐动，后者是十几个互不相干的
 静态细节。如果你觉得又挤了，要砍的应该是这两层里的一层，而不是回到彩纸和山脊。
@@ -397,9 +412,12 @@ DISHEARTENED 处错放了 ILLEGAL ARGUMENTS 对话框（早 6.3 秒）。现在�
 1920×1080 定点证据图，由 `VERIFY.shot()` 生成（星型拓扑 111.5 s、孤岛 118 s、铁栏 72 s、
 处决队列 163 s、极限与心 190 s）。
 
-跑法（需要一个支持 Range 且能收 POST 的本地服务，因为 `python -m http.server` 不支持
-byte-range，音频 seek 会失败；而 hidden 页面的截图可能返回陈旧合成帧，所以图是页面
-自己 POST 出来的）：
+跑法（`analysis/serve.mjs` 就是为这件事准备的：`python -m http.server` 不支持 byte-range，音频
+seek 会失败；而 hidden 页面的截图可能返回陈旧合成帧，所以图是页面自己 POST 出来的）：
+
+```
+node analysis/serve.mjs         # http://127.0.0.1:8773/index.html，抓图落在系统临时目录
+```
 
 ```
 document.head.appendChild(Object.assign(document.createElement('script'),
@@ -452,10 +470,13 @@ VERIFY.timbre(15)               // 顺带回答"配器到底是几种"
 ## 重新生成数据
 
 ```
-python -m http.server 8137 --bind 127.0.0.1
+node analysis/serve.mjs 8137
 打开 http://127.0.0.1:8137/analysis/analyze.html
 在控制台执行 run()
 ```
+
+音乐层同理：`http://127.0.0.1:8137/analysis/music.html`，执行 `run()`，把导出的
+`window.MUSIC` 写入 `mv/music.data.js`。
 
 约 35 秒后，页面会打印结构表、带 onset 梳状的波形图、以及标出边界的新颖度曲线。
 导出：`'window.SCORE=' + JSON.stringify(window.__score)`，写入 `mv/score.data.js`。

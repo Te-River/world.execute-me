@@ -260,8 +260,10 @@ function page(g, col, L, o) {
   g.fillRect(L.x - L.w * 0.04, L.y - L.h * 0.04, L.w * 1.08, L.h * 1.08);
   g.restore();
   const pg = g.createLinearGradient(L.x, L.y, L.x + L.w * 0.4, L.y + L.h);
-  pg.addColorStop(0, tint(col.page, '#ffffff', 0.35));
-  pg.addColorStop(1, tint(col.page, col.glow, 0.22));
+  /* the sheet used to be pulled 35% toward white at the top, which washed the section's hue out
+     — the contact sheet showed six "different" plates reading as one pale wash */
+  pg.addColorStop(0, tint(col.page, '#ffffff', 0.16));
+  pg.addColorStop(1, tint(col.page, col.glow, 0.34));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
   if (o.rule !== false) { g.fillStyle = rgba(ACC, 0.8); g.fillRect(L.x, L.y, 3, L.h); }
   g.save();
@@ -400,8 +402,10 @@ S.push({ id: 'globe', from: 16, to: 29.7,
     g.save(); g.beginPath(); g.arc(DW * 0.5, DH * 0.46, r, 0, TAU); g.clip();
     /* the globe is lit, not blown out: the page colour pulled back toward the room so the
        title inside it still has something to sit against */
-    g.fillStyle = tint(col.page, col.room1, 0.42); g.fillRect(L.x, L.y, L.w, L.h);
-    g.fillStyle = rgba(col.glow, 0.42); g.fillRect(L.x, DH * 0.46 + 60, L.w, 200);
+    /* the globe is a lit sphere, not a grey one: the room's premise is that nothing here gives
+       light except the paper, and a 14-second dark disc read as the lamp being switched off */
+    g.fillStyle = tint(col.page, col.room1, 0.16); g.fillRect(L.x, L.y, L.w, L.h);
+    g.fillStyle = rgba(col.glow, 0.5); g.fillRect(L.x, DH * 0.46 + 60, L.w, 200);
     dust(g, L, F, 90);
     G.subject(g, DW * 0.5, DH * 0.46 + 150, 0.72, 'stand', 1, F[8] * 0.5);
     g.restore();
@@ -551,8 +555,8 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     const px = lerp(0.2, 0.42, gu), py = lerp(0.78, 0.46, gu);
     on(g, L, (gg, W, H) => {
       gg.strokeStyle = INK; gg.fillStyle = INK; gg.lineWidth = 2.2;
-      if (t > 61.95 && t < 66.6) {                           /* STIMULATIONS */
-        const u = seg(t, 61.95, 65.3);
+      if (t > 59.68 && t < 66.6) {                           /* STIMULATIONS — it starts on "if I can" */
+        const u = seg(t, 59.68, 65.3);
         gg.strokeStyle = ACC; gg.lineWidth = 2.6;
         for (let i = 0; i < 4; i++) { const p = (u * 1.7 + i / 4) % 1; gg.globalAlpha = 0.5 * (1 - p); G.circle(gg, W * px, H * py + 26, 18 + p * 170); }
         gg.globalAlpha = 1;
