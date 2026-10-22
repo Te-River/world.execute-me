@@ -245,7 +245,7 @@ window.SCENE_G = G;
    on the floor. When "you have left" is sung six times the shaft and the sphere go out across
    exactly those six lines, and the ring is all that is left of him for the remaining ninety
    seconds — including the shot where she says she is the one still trapped. */
-function companion(g, col, F, t) {
+function companion(g, col, F, t, L) {
   const x = DW * 0.215, foot = GY - 18, head = DH * 0.165;
   const born = clamp((t - 6.38) / 1.6);
   const gone = clamp((t - 112.22) / 3.56);          /* 112.22 → 115.78: the six "you have left" */
@@ -256,6 +256,26 @@ function companion(g, col, F, t) {
   g.lineWidth = 1.6;
   g.save(); g.translate(x, foot); g.scale(1, 0.26);
   g.beginPath(); g.arc(0, 0, 92, 0, TAU); g.stroke(); g.restore();
+  /* The giving is an act, not an annotation: each thing she names leaves the sheet and lands where
+     he is standing. By the end the ring he left behind is full of what she gave him, and nobody is
+     there to hold it — which is the song's last argument, made without a word. The heart is the one
+     entry that never arrives: it was deleted, not offered. */
+  const ox = L.x + L.w * 0.04, oy = L.y + L.h * 0.52;
+  let parked = 0;
+  GIVEN.forEach((it, i) => {
+    if (it.cut) return;
+    const u = clamp((t - it.at - 0.6) / 2.4);
+    if (u <= 0) return;
+    const a = (parked / 8) * TAU; parked++;
+    const px = u < 1 ? ox + (x - ox) * u : x + Math.cos(a) * 52;
+    const py = u < 1 ? oy + (foot - oy) * u - Math.sin(u * Math.PI) * 96 : foot + Math.sin(a) * 13;
+    g.save(); g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = (u < 1 ? 1 : clamp((t - it.at - 3.0) / 1.2) * 0.85) * (0.35 + gone * 0.45);
+    const s = g.createRadialGradient(px - 2, py - 3, 0.5, px, py, 11);
+    s.addColorStop(0, rgba(col.page, 0.95)); s.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = s; g.beginPath(); g.arc(px, py, 11, 0, TAU); g.fill();
+    g.restore();
+  });
   if (live <= 0.001) return;
   g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = live;
   const shaft = g.createLinearGradient(0, head - 60, 0, foot);
@@ -275,7 +295,7 @@ function room(g, col, F, t, L, o) {
   INK = col.ink; ACC = col.accent; RIM = col.rim; PAGE = col.page;
   TT = t;
   SIL = tint(col.room0, '#000000', 0.55);
-  companion(g, col, F, t);
+  companion(g, col, F, t, L);
   const cx = L.x + L.w / 2, cy = L.y + L.h / 2;
   const reach = Math.max(L.w, L.h) * (o.reach || 1.5);
   const warm = col.glow;
