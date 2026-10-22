@@ -238,10 +238,44 @@ window.SCENE_G = G;
 /* room() paints what the light fails to reach; page() paints the lamp itself.
    L is the page rect in design space. Everything a scene draws after page() is clipped to
    it, so a diagram physically cannot spill into the room. */
+/* Until 110.9 s there are two lights in this room, and the other one is not hers. The song is a
+   dialogue with a second person who configures her, is handed everything she is, and then closes
+   the program — so the film needs a presence that can be absent. It is deliberately not a body:
+   a shaft at the end of the hall, a self-lit sphere for the one who is looked at, and a chalk ring
+   on the floor. When "you have left" is sung six times the shaft and the sphere go out across
+   exactly those six lines, and the ring is all that is left of him for the remaining ninety
+   seconds — including the shot where she says she is the one still trapped. */
+function companion(g, col, F, t) {
+  const x = DW * 0.215, foot = GY - 18, head = DH * 0.165;
+  const born = clamp((t - 6.38) / 1.6);
+  const gone = clamp((t - 112.22) / 3.56);          /* 112.22 → 115.78: the six "you have left" */
+  const live = born * (1 - gone);
+  /* the ring stays lit by nothing; it is only where he stood, and it is the one thing of his she
+     cannot delete */
+  g.strokeStyle = rgba(col.rim, 0.1 + live * 0.2 + gone * 0.16);
+  g.lineWidth = 1.6;
+  g.save(); g.translate(x, foot); g.scale(1, 0.26);
+  g.beginPath(); g.arc(0, 0, 92, 0, TAU); g.stroke(); g.restore();
+  if (live <= 0.001) return;
+  g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = live;
+  const shaft = g.createLinearGradient(0, head - 60, 0, foot);
+  shaft.addColorStop(0, rgba(col.page, 0.05));
+  shaft.addColorStop(0.5, rgba(col.rim, 0.15 + F[8] * 0.07));
+  shaft.addColorStop(1, rgba(col.rim, 0.03));
+  g.fillStyle = shaft; g.fillRect(x - 66, head - 60, 132, foot - head + 60);
+  const b = g.createRadialGradient(x - 8, head - 10, 1, x, head, 31);
+  b.addColorStop(0, rgba(col.page, 0.98)); b.addColorStop(0.5, rgba(col.rim, 0.45));
+  b.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = b; g.beginPath(); g.arc(x, head, 31, 0, TAU); g.fill();
+  g.restore();
+}
+
 function room(g, col, F, t, L, o) {
   o = o || {};
   INK = col.ink; ACC = col.accent; RIM = col.rim; PAGE = col.page;
+  TT = t;
   SIL = tint(col.room0, '#000000', 0.55);
+  companion(g, col, F, t);
   const cx = L.x + L.w / 2, cy = L.y + L.h / 2;
   const reach = Math.max(L.w, L.h) * (o.reach || 1.5);
   const warm = col.glow;
@@ -273,6 +307,46 @@ function room(g, col, F, t, L, o) {
   g.fillStyle = sh;
   g.translate(cx, base); g.scale(1, 0.16); g.translate(-cx, -base);
   g.fillRect(cx - L.w * 0.62, base - L.w * 0.62, L.w * 1.24, L.w * 1.24);
+  g.restore();
+}
+
+/* The song's actual spine, which the diagrams only describe: she is made by someone who fills in
+   her parameters, and she answers by handing over whatever part of herself the metaphor is
+   standing on — her dimension, her circumference, her tangents, her bound, her nourishment, her
+   proof of existence — until the last one is not given but taken (DISHEARTENED, the heart
+   deleted). The film had no memory of any of that: each scene drew its figure and the next scene
+   started clean. The ledger is what makes the giving cumulative, so that by the chant the sheet is
+   mostly the space where things used to be. */
+const GIVEN = [
+  { at: 32.68, w: 'DIMENSION' }, { at: 36.28, w: 'CIRCUMFERENCE' }, { at: 40.04, w: 'TANGENTS' },
+  { at: 43.50, w: 'LIMITATIONS' }, { at: 76.95, w: 'NUTRIENTS' }, { at: 80.62, w: 'ANTIOXIDANTS' },
+  { at: 84.26, w: 'ENJOYMENT' }, { at: 87.92, w: 'EXISTENCE' }, { at: 124.89, w: 'HEART', cut: true },
+];
+let TT = 0;
+function givings(g, L) {
+  /* What stays on the sheet is the hole, not the label: the word is legible while she sings it and
+     collapses afterwards into an empty dashed box, so the accumulation reads as a column of gaps
+     down the edge of the page rather than as a second diagram competing with the first. */
+  const x = L.x + L.w * 0.945, sz = L.h * 0.03;
+  g.save();
+  g.font = `400 ${sz * 0.62}px ui-monospace,Consolas,monospace`;
+  g.textBaseline = 'middle'; g.textAlign = 'right';
+  GIVEN.forEach((it, i) => {
+    const a = clamp((TT - it.at) / 0.6);
+    if (a <= 0) return;
+    const y = L.y + L.h * 0.1 + i * sz * 1.7;
+    const word = a * (1 - clamp((TT - it.at - 1.2) / 2.2));
+    g.globalAlpha = a * 0.42;
+    g.strokeStyle = it.cut ? rgba(ACC, 0.95) : rgba(INK, 0.6);
+    g.lineWidth = it.cut ? 1.6 : 1;
+    if (it.cut) { g.strokeRect(x - sz, y - sz / 2, sz, sz);
+      G.line(g, x - sz, y - sz / 2, x, y + sz / 2); G.line(g, x, y - sz / 2, x - sz, y + sz / 2); }
+    else { g.setLineDash([3, 3]); g.strokeRect(x - sz, y - sz / 2, sz, sz); g.setLineDash([]); }
+    if (word > 0.02) {
+      g.globalAlpha = word * 0.75; g.fillStyle = it.cut ? rgba(ACC, 0.95) : rgba(INK, 0.8);
+      g.fillText(it.w, x - sz * 1.5, y);
+    }
+  });
   g.restore();
 }
 
@@ -315,6 +389,7 @@ function page(g, col, L, o) {
   if (o.rule !== false) { g.fillStyle = rgba(ACC, 0.8); g.fillRect(L.x, L.y, 3, L.h); }
   g.save();
   g.beginPath(); g.rect(L.x, L.y, L.w, L.h); g.clip();
+  if (o.ledger !== false) givings(g, L);
   return g;
 }
 /* draw in page-local coordinates: (0,0) is the sheet's top-left, 1x1 units are fractions of it */
@@ -591,16 +666,21 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
 
 /* 5 — 59.22..74.04 s: the cursor, the heart, and the first EXECUTION */
 S.push({ id: 'chorus1', from: 59.22, to: 74.04,
-  frame: (k) => ({ z: 1.1 - k * 0.06, x: DW * 0.5, y: DH * 0.48 }),
+  /* deliberately the same shot as 'free' at 188-192 s: same framing, same sheet rect, same cage
+     geometry, same node. The song sings "trapped in this strange strange SIMULATION" at 73 s and
+     "I am trapped, trapped in LOVE" at 191 s — the same sentence with the same slot filled by a
+     different word. That equation is the whole point of the piece, so the two frames have to be
+     literally one frame, and the only thing allowed to change is the word and what the bars turn
+     out to be the outline of. */
+  frame: (k) => ({ z: 1.06 - k * 0.06, x: DW * 0.52, y: DH * 0.46 }),
   draw(g, k, F, t, col) {
-    const L = { x: 320, y: 158, w: 680, h: 504 };
-    room(g, col, F, t, L, { reach: 1.9 });
+    const L = { x: 150, y: 176, w: 640, h: 470 };
+    const cx = DW * 0.8;
+    room(g, col, F, t, L, { reach: 1.8 });
     if (t > 70.08) {                                         /* we are trapped — behind the sheet */
-      const u = oback(seg(t, 70.08, 73.6));
-      /* sized to the sheet, not to the room: spanning the full frame height it read as a red fence
-         planted in front of the picture, which is the opposite of the line being sung */
-      g.strokeStyle = rgba(ACC, 0.72); g.lineWidth = 5;
-      G.cage(g, L.x + L.w / 2, L.y - 40 - (1 - u) * 180, L.y + L.h + 22, L.w * 1.34, 5);
+      const u = seg(t, 70.08, 73.6);
+      g.strokeStyle = rgba(ACC, 0.55); g.lineWidth = 3.4;
+      G.cage(g, cx, DH * 0.06 + u * (GY - DH * 0.06), GY + 20, DW * 0.3, 5);
     }
     page(g, col, L, { blur: 34 });
     const gu = seg(t, 59.22, 65.39);
@@ -643,7 +723,7 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
       gg.stroke();
     });
     endPage(g);
-    G.subject(g, DW * 0.87, GY, 1.3, t > 70 ? 'reach' : 'stand', -1, F[8] * 0.5);
+    G.subject(g, cx, GY, 1.05, t > 70 ? 'reach' : 'stand', 0, F[8] * 0.5);
     dust(g, L, F, 110);
   } });
 
@@ -1066,7 +1146,7 @@ S.push({ id: 'free', from: 184.54, to: 193,
     const v = seg(t, 188.48, 192.6);
     const cx = DW * 0.8;
     if (v < 0.85) {
-      g.strokeStyle = rgba(INK, 0.5); g.lineWidth = 3;
+      g.strokeStyle = rgba(ACC, 0.55); g.lineWidth = 3.4;
       G.cage(g, cx, DH * 0.06 + v * (GY - DH * 0.06), GY + 20, DW * 0.3, 5);
     }
     const u = oback(v);
