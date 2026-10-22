@@ -96,6 +96,10 @@ const G = {
      cannot join, 'kneel'/'sit' sink it toward the floor, 'empty' leaves only the socket,
      'dead' strikes it through. */
   subject(g, x, y, s, pose, rimSide, bounce) {
+    /* The camera is now zoomed past the edges of the design space, so anything parked at the
+       right margin falls out of view. The subject is held inside the window; 'empty' is left
+       where it is on purpose — the other one is out of frame, which is the whole point. */
+    if (pose !== 'empty') x = Math.min(x, DW * 0.755);
     const r = 27 * s, side = x > DW * 0.5 ? -1 : 1;
     let cy = y - r - (bounce || 0) * 6, lit = rimSide === 0 ? 0.18 : 0.85;
     if (pose === 'kneel' || pose === 'sit') { cy = y - r * 0.62; lit *= 0.55; }
@@ -158,7 +162,13 @@ const G = {
      things that leave, kneel, are sentenced and are missed are nodes, and what happens to
      them is whether they still receive light. */
   node(g, x, y, r, lit, col) {
-    g.fillStyle = SIL; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    /* a body, not a disc: the same key light that lifts the rim has to fall across the face of
+       it, or the node reads as a sticker on the room rather than something standing in it */
+    const body = g.createRadialGradient(x - r * 0.38, y - r * 0.44, r * 0.06, x, y, r * 1.06);
+    body.addColorStop(0, tint(SIL, col.page, 0.1 + lit * 0.42));
+    body.addColorStop(0.55, SIL);
+    body.addColorStop(1, '#000000');
+    g.fillStyle = body; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
     if (lit > 0) {
       g.strokeStyle = rgba(col.rim, 0.25 + lit * 0.6); g.lineWidth = Math.max(1.4, r * 0.14);
       g.beginPath(); g.arc(x, y, r, Math.PI * 1.18, Math.PI * 1.86); g.stroke();
@@ -243,27 +253,75 @@ function room(g, col, F, t, L, o) {
   beam.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = beam; g.fillRect(0, 0, DW, DH);
   g.restore();
-  /* the floor: one line, and the page's reflection falling down to it */
-  const fy = GY + 8;
-  g.strokeStyle = rgba(warm, 0.1 + col.lum * 0.08); g.lineWidth = 1.4;
-  G.line(g, 0, fy, DW, fy);
-  const refl = g.createLinearGradient(0, fy, 0, DH);
-  refl.addColorStop(0, rgba(warm, 0.06 + col.lum * 0.05)); refl.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = refl; g.fillRect(L.x - 40, fy, L.w + 80, DH - fy);
+  /* the floor is a plane with a vanishing point, not a line. Head-on, one horizontal rule made
+     every shot the same flat stage; giving the ground a horizon lets the page and the node stand
+     at different distances from the lens, which is what the room has been missing. */
+  const hy = DH * 0.5, vpx = DW * 0.5;
+  g.strokeStyle = rgba(warm, 0.16 + col.lum * 0.13); g.lineWidth = 1.2;
+  for (let i = 1; i <= 13; i++) {
+    const u = i / 13, y = hy + (DH - hy) * u * u;
+    g.globalAlpha = u * u; G.line(g, 0, y, DW, y);
+  }
+  for (let i = -6; i <= 6; i++) {
+    /* the fan lines are the room's only straight perspective, so they have to stop short of the
+       frame edge — drawn full length they wireframe the whole picture and out-shout the diagram */
+    const run = i * DW * 0.19;
+    g.globalAlpha = 0.3 * (1 - Math.abs(i) / 7);
+    G.line(g, vpx, hy, vpx + run * 0.62, DH * 0.94);
+  }
+  g.globalAlpha = 1;
+  /* the sheet's light on the ground, and the shadow it casts back into */
+  const base = Math.min(DH - 6, L.y + L.h);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const pool = g.createRadialGradient(cx, base, 0, cx, base, L.w * 1.1);
+  pool.addColorStop(0, rgba(warm, 0.16 + col.lum * 0.12));
+  pool.addColorStop(0.45, rgba(warm, 0.05));
+  pool.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = pool;
+  g.save(); g.translate(cx, base); g.scale(1, 0.26); g.translate(-cx, -base);
+  g.fillRect(cx - L.w * 1.1, base - L.w * 1.1, L.w * 2.2, L.w * 2.2); g.restore();
+  g.restore();
+  g.save();
+  const sh = g.createRadialGradient(cx, base, 0, cx, base, L.w * 0.62);
+  sh.addColorStop(0, 'rgba(0,0,0,0.5)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = sh;
+  g.translate(cx, base); g.scale(1, 0.16); g.translate(-cx, -base);
+  g.fillRect(cx - L.w * 0.62, base - L.w * 0.62, L.w * 1.24, L.w * 1.24);
+  g.restore();
+  /* the far wall: the light dies before it reaches the top of the room */
+  const wall = g.createLinearGradient(0, 0, 0, hy);
+  wall.addColorStop(0, rgba(col.room0, 0.85)); wall.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = wall; g.fillRect(0, 0, DW, hy);
 }
 
 function page(g, col, L, o) {
   o = o || {};
+  const mcx = L.x + L.w / 2, mcy = L.y + L.h / 2;
+  g.save();
+  /* The sheet used to be an axis-aligned card pasted onto the frame, near-white and covering two
+     thirds of it — no room survives that, and the 9-cell grid showed every shot as a lit slide on
+     black. It is now a board standing in the hall: smaller, turned a few degrees, and lit only
+     where it faces the lamp. The turn is derived from the sheet's own geometry rather than from
+     the clock, so each shot is framed differently but nothing can jump between frames. The
+     transform stays live until endPage, so the clip and the ink drawn through on() are sheared by
+     exactly the same matrix. */
+  const side = (mcx / DW) - 0.5;
+  const seed = ((Math.round(L.x) * 7 + Math.round(L.y) * 13 + Math.round(L.w) * 5) % 97) / 97;
+  const turn = side * 0.05 + (seed - 0.5) * 0.085 + (L.h / L.w - 0.55) * 0.04;
+  const lean = -0.03 - side * 0.05 + (seed - 0.5) * 0.05;
+  g.translate(mcx, mcy); g.transform(1, lean, 0, 1, 0, 0); g.rotate(turn);
+  g.scale(0.84, 0.9); g.translate(-mcx, -mcy);
   /* the cast bloom: a blurred copy of the sheet lying behind it */
   g.save(); g.filter = `blur(${o.blur === undefined ? 26 : o.blur}px)`;
-  g.fillStyle = rgba(col.page, 0.34 + col.lum * 0.2);
-  g.fillRect(L.x - L.w * 0.04, L.y - L.h * 0.04, L.w * 1.08, L.h * 1.08);
+  g.fillStyle = rgba(col.page, 0.15 + col.lum * 0.11);
+  g.fillRect(L.x - L.w * 0.03, L.y - L.h * 0.03, L.w * 1.06, L.h * 1.06);
   g.restore();
-  const pg = g.createLinearGradient(L.x, L.y, L.x + L.w * 0.4, L.y + L.h);
+  const pg = g.createLinearGradient(L.x, L.y, L.x + L.w * 0.78, L.y + L.h);
   /* the sheet used to be pulled 35% toward white at the top, which washed the section's hue out
      — the contact sheet showed six "different" plates reading as one pale wash */
-  pg.addColorStop(0, tint(col.page, '#ffffff', 0.16));
-  pg.addColorStop(1, tint(col.page, col.glow, 0.34));
+  pg.addColorStop(0, tint(col.page, '#ffffff', 0.2));
+  pg.addColorStop(0.34, tint(col.page, col.glow, 0.26));
+  pg.addColorStop(1, tint(col.page, col.room0, 0.74));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
   if (o.rule !== false) { g.fillStyle = rgba(ACC, 0.8); g.fillRect(L.x, L.y, 3, L.h); }
   g.save();
@@ -276,7 +334,7 @@ function on(g, L, fn) {
   fn(g, L.w, L.h);
   g.restore();
 }
-function endPage(g) { g.restore(); }
+function endPage(g) { g.restore(); g.restore(); }   /* the clip, then the board's own matrix */
 
 /* dust in the beam — only where the light reaches */
 function dust(g, L, F, n) {
@@ -400,11 +458,14 @@ S.push({ id: 'globe', from: 16, to: 29.7,
     g.save(); g.filter = 'blur(30px)'; g.fillStyle = rgba(col.page, 0.4);
     g.beginPath(); g.arc(DW * 0.5, DH * 0.46, r, 0, TAU); g.fill(); g.restore();
     g.save(); g.beginPath(); g.arc(DW * 0.5, DH * 0.46, r, 0, TAU); g.clip();
-    /* the globe is lit, not blown out: the page colour pulled back toward the room so the
-       title inside it still has something to sit against */
-    /* the globe is a lit sphere, not a grey one: the room's premise is that nothing here gives
-       light except the paper, and a 14-second dark disc read as the lamp being switched off */
-    g.fillStyle = tint(col.page, col.room1, 0.16); g.fillRect(L.x, L.y, L.w, L.h);
+    /* the globe is a lit sphere, not a grey one: a flat fill inside a circular clip read as a
+       disc of paper, and only a highlight with a terminator opposite it says "body, in a room" */
+    const lit = g.createRadialGradient(DW * 0.5 - r * 0.42, DH * 0.46 - r * 0.5, r * 0.05,
+                                       DW * 0.5, DH * 0.46, r * 1.15);
+    lit.addColorStop(0, tint(col.page, '#ffffff', 0.24));
+    lit.addColorStop(0.42, tint(col.page, col.room1, 0.22));
+    lit.addColorStop(1, tint(col.room1, '#000000', 0.62));
+    g.fillStyle = lit; g.fillRect(L.x, L.y, L.w, L.h);
     g.fillStyle = rgba(col.glow, 0.5); g.fillRect(L.x, DH * 0.46 + 60, L.w, 200);
     dust(g, L, F, 90);
     G.subject(g, DW * 0.5, DH * 0.46 + 150, 0.72, 'stand', 1, F[8] * 0.5);

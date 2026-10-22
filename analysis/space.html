@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>space — a stage with depth, driven by the same measured data</title>
+<style>
+  body { background: #0d0f14; color: #cdd6f4; font: 13px/1.6 ui-monospace, Consolas, monospace; margin: 20px; }
+  canvas { display: block; background: #000; width: 960px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>候选 v7：把画面立起来 —— 透视舞台</h1>
+<p>诊断：之前所有版本都是<b>一张平放的卡片上的等粗墨线</b>，摄影机只是在缩放它，所以没有电影感。
+这一版把同一个实测数据集（128.00 BPM、451 拍、逐拍力度、旋律音高）放进一个有纵深的世界里：
+针孔投影、地格、体积球、雾、透视文字墙，摄影机<b>沿 z 轴向前行进</b>，高度跟着她唱的音高走。
+<button onclick="go()">render</button> <span id="st"></span></p>
+<div id="out"></div>
+<script src="../mv/music.data.js"></script>
+<script>
+const M = window.MUSIC, META = M.meta, HOP = META.hop / META.sr;
+const W = 1920, H = 1080, F = 1150;                     /* focal length in px */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+const rgba = (s, a) => { const c = hex(s); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+
+function pitchAt(t) {
+  const i = t / HOP; if (i < 4 || i >= META.frames - 4) return 0;
+  const k = Math.floor(i / 4), f = i / 4 - k;
+  const a = M.f0[k * 4], b = M.f0[(k + 1) * 4]; if (!a || !b) return 0;
+  const hz = ((a + (b - a) * f) + (a + b) * 0.25) / 2.5 / 255 * 1100;
+  return hz > 55 ? hz : 0;
+}
+function beatW(t) {                                     /* decaying pulse off the measured onsets */
+  let best = 0;
+  for (let i = 0; i < M.beat.length; i++) {
+    const d = t - M.beat[i]; if (d < 0) break;
+    if (d > 0.9) continue;
+    best = Math.max(best, (M.beatOn[i] || 0) / 255 * Math.exp(-d / 0.22));
+  }
+  return best;
+}
+function plate(t) {
+  if (t < 15) return { sky: '#0b1017', floor: '#141b24', key: '#cfe0f0', hot: '#f2f6fa', red: '#d4364f' };
+  if (t < 44.45) return { sky: '#0a1a2e', floor: '#13293f', key: '#8fc0e8', hot: '#e8f2fb', red: '#e8506a' };
+  if (t < 74.04) return { sky: '#2a0d12', floor: '#3d1418', key: '#f0b070', hot: '#fde8cc', red: '#ff5c72' };
+  if (t < 110.9) return { sky: '#0d1f1a', floor: '#16302a', key: '#9ed9b4', hot: '#eafaf0', red: '#e0685c' };
+  if (t < 131.22) return { sky: '#241a10', floor: '#33261a', key: '#d8a86a', hot: '#f6e6cc', red: '#e0603c' };
+  if (t < 147.66) return { sky: '#060809', floor: '#0b0e12', key: '#4e5f70', hot: '#c8d2da', red: '#9c3a48' };
+  if (t < 177.24) return { sky: '#3d0710', floor: '#5c0d18', key: '#ff8f6a', hot: '#ffe9e4', red: '#ff2d55' };
+  if (t < 193) return { sky: '#161430', floor: '#221f42', key: '#9aa0e8', hot: '#eae7fb', red: '#e8506a' };
+  return { sky: '#0b0709', floor: '#171013', key: '#8a5a3a', hot: '#d8c6b4', red: '#a8402c' };
+}
+
+let cam = { x: 0, y: 0, z: 0 };
+/* the vertical axis is squeezed: at 1 world unit = 4 px, anything "above the floor" by more
+   than ~120 units leaves the frame, which is why the first render was four empty shots */
+function proj(p) {
+  const dz = p[2] - cam.z;
+  if (dz < 6) return null;
+  const k = F / dz;
+  return { x: W / 2 + (p[0] - cam.x) * k, y: H * 0.44 + (p[1] * 0.3 - cam.y) * k, s: k, d: dz };
+}
+function seg(g, a, b, col, w, dash) {
+  const A = proj(a), B = proj(b); if (!A || !B) return;
+  g.save(); if (dash) g.setLineDash(dash.map((v) => Math.max(1, v * A.s * 8)));
+  g.strokeStyle = col; g.lineWidth = Math.max(0.4, w * (A.s + B.s) / 2);
+  g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke(); g.restore();
+}
+function ball(g, p, r, P, lit) {
+  const s = proj(p); if (!s) return;
+  const R = Math.max(0.8, r * s.s * 0.34), fog = clamp(1 - (s.d - 40) / 620, 0.06, 1);
+  const gx = s.x - R * 0.34, gy = s.y - R * 0.4;
+  const grd = g.createRadialGradient(gx, gy, R * 0.05, s.x, s.y, R);
+  grd.addColorStop(0, rgba(P.hot, (0.2 + lit * 0.8) * fog));
+  grd.addColorStop(0.35, rgba(P.key, (0.1 + lit * 0.5) * fog));
+  grd.addColorStop(1, rgba('#05070a', 0.92 * fog));
+  g.fillStyle = grd; g.beginPath(); g.arc(s.x, s.y, R, 0, 6.283); g.fill();
+  if (lit > 0.25) {                                   /* the rim the key light catches */
+    g.strokeStyle = rgba(P.key, 0.5 * lit * fog); g.lineWidth = Math.max(0.6, R * 0.09);
+    g.beginPath(); g.arc(s.x, s.y, R * 0.97, -2.4, -0.7); g.stroke();
+  }
+  return { s, R, fog };
+}
+function floor(g, P, fog) {
+  for (let z = Math.ceil(cam.z / 60) * 60; z < cam.z + 640; z += 60) {
+    const a = proj([-520, 0, z]), b = proj([520, 0, z]); if (!a || !b) continue;
+    g.strokeStyle = rgba(P.key, 0.1 * clamp(1 - (z - cam.z) / 640, 0, 1)); g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  }
+  for (let x = -480; x <= 480; x += 120) {
+    const a = proj([x, 0, cam.z + 24]), b = proj([x, 0, cam.z + 620]); if (!a || !b) continue;
+    g.strokeStyle = rgba(P.key, 0.06); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  }
+}
+function word(g, txt, P, z, size, y, alpha) {
+  const s = proj([0, y, z]); if (!s) return;
+  g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+  /* the type is a physical object in the hall: big enough to dominate a frame, small enough to
+     be read across it — the first pass filled the screen with unreadable fragments */
+  g.font = `300 ${Math.max(6, size * s.s * 0.42)}px Georgia,"Times New Roman",serif`;
+  g.globalAlpha = alpha * clamp(1 - (s.d - 60) / 700, 0.1, 1);
+  g.fillStyle = rgba(P.red, 0.5); g.fillText(txt, s.x - 4 * s.s, s.y + 3 * s.s);
+  g.fillStyle = rgba(P.key, 0.5); g.fillText(txt, s.x + 4 * s.s, s.y - 3 * s.s);
+  g.fillStyle = rgba(P.hot, 0.95); g.fillText(txt, s.x, s.y);
+  g.restore();
+}
+
+/* one shot per moment; each is a spatial event, not a diagram */
+function scene(g, t, P) {
+  const z0 = cam.z;
+  if (t < 15) {                                        /* the lamp is switched on down the hall */
+    for (let i = 0; i < 7; i++) ball(g, [-260 + i * 90, -140 - Math.sin(i * 0.8) * 40, z0 + 150 + i * 70], 16, P, 0.2 + 0.5 * Math.max(0, Math.sin(t * 2 - i * 0.7)));
+    word(g, 'SWITCH ON THE POWER LINE', P, z0 + 300, 120, -230, clamp((t - 0.1) / 2, 0, 1));
+  } else if (t < 44.45) {                              /* the theorem: a ring standing in the room */
+    const c = [0, -170, z0 + 260], R = 150;
+    for (let i = 0; i < 46; i++) {
+      const a0 = i / 46 * 6.283, a1 = (i + 1.6) / 46 * 6.283;
+      seg(g, [c[0] + Math.cos(a0) * R, c[1] + Math.sin(a0) * R * 0.34, c[2]], [c[0] + Math.cos(a1) * R, c[1] + Math.sin(a1) * R * 0.34, c[2]], rgba(P.red, 0.85), 3.4);
+    }
+    seg(g, c, [c[0] + Math.cos(t * 1.1) * R, c[1] + Math.sin(t * 1.1) * R * 0.34, c[2]], rgba(P.hot, 0.5), 1.6);
+    for (let i = 0; i < 34; i++) { const a = i * 2.399, rr = 20 + i * 3.4;
+      ball(g, [c[0] + Math.cos(a) * rr, c[1] + 150 - ((i * 7) % 90), c[2] + Math.sin(a) * rr * 0.5], 3.4, P, 0.7); }
+    word(g, 'DIMENSION', P, z0 + 420, 190, -300, clamp((t - 31) / 1.6, 0, 1));
+  } else if (t < 74.04) {                              /* the bargain: a lit core with ripples */
+    ball(g, [0, -190, z0 + 250], 74, P, 0.95);
+    for (let i = 0; i < 5; i++) {
+      const ph = ((t * 0.42 + i / 5) % 1), rr = 90 + ph * 320, al = (1 - ph) * 0.45;
+      for (let k = 0; k < 40; k++) { const a0 = k / 40 * 6.283, a1 = (k + 1.2) / 40 * 6.283;
+        seg(g, [Math.cos(a0) * rr, -190 + Math.sin(a0) * rr * 0.3, z0 + 250 + Math.sin(a0) * rr * 0.2],
+               [Math.cos(a1) * rr, -190 + Math.sin(a1) * rr * 0.3, z0 + 250 + Math.sin(a1) * rr * 0.2], rgba(P.red, al), 2.2); }
+    }
+    word(g, 'SATISFACTION', P, z0 + 470, 200, -330, clamp((t - 65.39) / 1.4, 0, 1));
+  } else if (t < 110.9) {                              /* the offerings: plates on stands in depth */
+    const kinds = ['EGGPLANT', 'TOMATO', 'TABBY'];
+    for (let i = 0; i < 3; i++) {
+      const x = -230 + i * 230, zz = z0 + 210 + i * 60;
+      seg(g, [x, 0, zz], [x, -120, zz], rgba(P.key, 0.3), 2);
+      ball(g, [x, -160 - Math.sin(t * 1.3 + i) * 8, zz], 40 - i * 4, P, t > 74.04 + i * 3.5 ? 0.9 : 0.15);
+    }
+    word(g, 'NUTRIENTS', P, z0 + 360, 150, -300, clamp((t - 76.95) / 1.2, 0, 1));
+  } else if (t < 131.22) {                             /* absence: the network, arms going dark */
+    const cut = [110.90, 112.22, 113.10, 114.18, 114.92, 115.78].filter((w) => t >= w).length;
+    const hub = [0, -200, z0 + 300];
+    for (let i = 0; i < 6; i++) {
+      const a = -1.57 + i * 1.047, live = i >= cut;
+      const p = [hub[0] + Math.cos(a) * 300, hub[1] + Math.sin(a) * 170, hub[2] + Math.sin(a) * 120];
+      seg(g, hub, p, rgba(P.key, live ? 0.55 : 0.12), live ? 2.6 : 1.2, live ? null : [5, 6]);
+      ball(g, p, live ? 26 : 17, P, live ? 0.85 : 0.06);
+      if (!live) { const q = proj([(hub[0] + p[0]) / 2, (hub[1] + p[1]) / 2, (hub[2] + p[2]) / 2]);
+        if (q) { g.strokeStyle = rgba(P.red, 0.8); g.lineWidth = Math.max(1.5, 5 * q.s);
+          g.beginPath(); g.moveTo(q.x - 16 * q.s, q.y - 16 * q.s); g.lineTo(q.x + 16 * q.s, q.y + 16 * q.s); g.stroke(); } }
+    }
+    ball(g, hub, 46, P, 1);
+    word(g, 'ISOLATION', P, z0 + 520, 210, -340, clamp((t - 117.27) / 1.3, 0, 1));
+  } else if (t < 147.66) {                             /* nothing scheduled: one dark ball, a long hall */
+    for (let i = 0; i < 5; i++) ball(g, [-400 + i * 200, -60, z0 + 420 + i * 40], 12, P, 0.05);
+    ball(g, [0, -70, z0 + 200], 54, P, 0.22);
+    word(g, 'ILLEGAL ARGUMENTS', P, z0 + 380, 150, -260, clamp((t - 128.66) / 1.6, 0, 1));
+  } else if (t < 177.24) {                             /* the sentence: a colonnade of monoliths */
+    const n = 11;
+    for (let i = 0; i < n; i++) {
+      const x = -420 + i * 84, zz = z0 + 180 + (i % 3) * 90, h = 300 + (i % 4) * 90;
+      const a = proj([x - 26, 0, zz]), b = proj([x + 26, 0, zz]), c = proj([x + 26, -h, zz]), d = proj([x - 26, -h, zz]);
+      if (!a || !b || !c || !d) continue;
+      const fog = clamp(1 - (zz - cam.z - 100) / 700, 0.1, 1);
+      g.fillStyle = rgba(P.floor, 0.95 * fog); g.beginPath();
+      g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c.x, c.y); g.lineTo(d.x, d.y); g.closePath(); g.fill();
+      g.strokeStyle = rgba(P.key, 0.4 * fog); g.lineWidth = Math.max(0.5, 1.6 * a.s); g.stroke();
+      if (i < Math.min(n, Math.floor((t - 147.66) / 0.62))) {
+        g.fillStyle = rgba(P.red, 0.75 * fog); g.font = `${Math.max(5, 26 * a.s)}px ui-monospace,monospace`;
+        g.textAlign = 'center'; g.fillText('NaN', (a.x + c.x) / 2, (a.y + c.y) / 2);
+      }
+    }
+    word(g, 'EXECUTION', P, z0 + 430, 240, -360, clamp((t - 155.2) / 1.2, 0, 1));
+  } else if (t < 193) {                                /* the answer: a horizon it never reaches */
+    const hz = [0, -150, z0 + 620];
+    seg(g, [-520, -150, z0 + 60], hz, rgba(P.red, 0.5), 2.4, [8, 8]);
+    seg(g, [520, -150, z0 + 60], hz, rgba(P.red, 0.5), 2.4, [8, 8]);
+    for (let i = 0; i < 40; i++) {
+      const u = i / 39, zz = z0 + 70 + u * 520, y = -60 - Math.exp(-u * 3.4) * -0 - (140 * Math.exp(-u * 2.2));
+      const q = proj([-300 + u * 300, -y * 0.9 - 40, zz]); if (!q) continue;
+      g.fillStyle = rgba(P.hot, 0.7); g.beginPath(); g.arc(q.x, q.y, Math.max(0.6, 3.6 * q.s), 0, 6.283); g.fill();
+    }
+    ball(g, hz, 40, P, 0.18);
+    word(g, 'LO-O-OVE', P, z0 + 300, 230, -330, clamp((t - 179.92) / 1.6, 0, 1));
+  } else {                                             /* the light leaving */
+    for (let i = 0; i < 6; i++) ball(g, [-300 + i * 120, -40 - i * 20, z0 + 260 + i * 60], 20, P, clamp(1 - (t - 193) / 11, 0, 1) * 0.5);
+    word(g, 'PROCESS ENDED', P, z0 + 420, 130, -220, clamp((t - 207.4) / 1.4, 0, 1));
+  }
+}
+
+function frame(t) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const P = plate(t);
+  cam = { x: Math.sin(t * 0.11) * 40, y: -clamp(pitchAt(t), 0, 700) * 0.02 - beatW(t) * 4, z: t * 30 + beatW(t) * 7 };
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, P.sky); sky.addColorStop(0.52, P.floor); sky.addColorStop(1, P.sky);
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  /* the key light down the hall, and its bloom */
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const kx = W * 0.5 + (Math.sin(t * 0.3) * 160 * F) / 320, ky = H * 0.42;
+  const bl = g.createRadialGradient(kx, ky, 0, kx, ky, H * 0.85);
+  bl.addColorStop(0, rgba(P.key, 0.2 + beatW(t) * 0.12)); bl.addColorStop(0.4, rgba(P.key, 0.05)); bl.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = bl; g.fillRect(0, 0, W, H); g.restore();
+  floor(g, P);
+  scene(g, t, P);
+  /* the melody as a wire running through the space, at hand height */
+  g.save(); g.strokeStyle = rgba(P.hot, 0.5); g.lineWidth = 2; g.beginPath();
+  let pen = false;
+  for (let u = t - 5; u < t + 9; u += 0.05) {
+    const hz = pitchAt(u); if (hz < 55) { pen = false; continue; }
+    const p = proj([(u - t) * 46, -170 - Math.log2(hz / 55) * 62, cam.z + 120]);
+    if (!p) { pen = false; continue; }
+    pen ? g.lineTo(p.x, p.y) : (g.moveTo(p.x, p.y), pen = true);
+  }
+  g.stroke(); g.restore();
+  /* depth haze and the lamp's own falloff */
+  g.save(); g.globalCompositeOperation = 'multiply';
+  const hz2 = g.createLinearGradient(0, H * 0.34, 0, H);
+  hz2.addColorStop(0, 'rgba(255,255,255,1)'); hz2.addColorStop(0.5, rgba(P.sky, 0.3)); hz2.addColorStop(1, 'rgba(8,8,11,1)');
+  g.fillStyle = hz2; g.fillRect(0, 0, W, H); g.restore();
+  const vg = g.createRadialGradient(W / 2, H * 0.5, H * 0.26, W / 2, H * 0.5, H * 1.05);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.66)');
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  g.save(); g.globalAlpha = 0.05;
+  for (let i = 0; i < 2600; i++) { g.fillStyle = i % 2 ? '#fff' : '#000'; g.fillRect((i * 7919) % W, (i * 104729) % H, 1.7, 1.7); }
+  g.restore();
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H * 0.05); g.fillRect(0, H * 0.95, W, H * 0.05);
+  return cv;
+}
+
+async function go() {
+  const out = document.getElementById('out'); out.innerHTML = '';
+  for (const t of [8, 36, 66, 84, 118, 132, 150, 190, 200]) {
+    const cv = frame(t); out.appendChild(cv);
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9));
+    await fetch('/save-space-' + t + '.jpg', { method: 'POST', body: blob });
+    document.getElementById('st').textContent = 'at ' + t;
+  }
+  document.getElementById('st').textContent = 'done';
+}
+go();
+</script>
+</body>
+</html>

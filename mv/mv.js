@@ -142,7 +142,13 @@ addEventListener('resize', resize);
    The design space is fitted with min(), not max(): a tall or narrow window used to crop
    the sides of the 16:9 page, which is how the listing lost its left-hand columns. Now the
    whole sheet is always on screen and the surplus becomes letterbox. */
-function fitScale() { return Math.min(W / DW, HH / DH); }
+/* The design space is fitted with min(), not max(): a tall or narrow window used to crop
+   the sides of the 16:9 page, which is how the listing lost its left-hand columns. Now the
+   whole sheet is always on screen and the surplus becomes letterbox.
+   The 1.3 multiplier is the contact sheet's verdict: with the sheet fully visible the paper
+   occupied under half of every frame and the rest was empty card. Zoomed past the plate, the
+   frame is inside the paper and the letterbox is gone. */
+function fitScale() { return Math.min(W / DW, HH / DH) * 1.16; }
 function applyCamera(g, fr, t) {
   /* The camera breathes with the bar, not with a clock: it eases in across the four beats and
      releases at the next downbeat, and the downbeat itself pushes by an amount taken from that
@@ -513,7 +519,10 @@ function render(ts) {
      source, so the stroke and the word belong to the room and the page covers whatever runs
      behind it — the word reads as emerging out of the light, not as an overlay on top of it. */
   bx.setTransform(1, 0, 0, 1, 0, 0);
-  if (window.MUSIC) { MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z); }
+  if (window.MUSIC) {
+    MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z);
+    MVL.chrome(bx, t, W, HH, pal, raw);
+  }
   const nxt = SCENES[idx + 1];
   const dis = dissolveLen(nxt ? nxt.from : t);      /* the chorus joins tighter than the intro */
   if (nxt && nxt.from - t < dis) {

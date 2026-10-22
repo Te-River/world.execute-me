@@ -194,23 +194,109 @@ function display(g, t, W, H, pal, LYRICS, camZ) {
   /* the tighter the shot, the smaller the word: at z=1.5 the sheet covers most of the frame and
      a full-size word would be invisible behind the light */
   const fit = clamp(1.06 / (camZ || 1), 0.6, 1.06);
-  const size = Math.min(H * 0.095, W * 0.07) * fit;
-  const x = W * 0.045, y = H * 0.2;
+  const size = Math.min(H * 0.15, W * 0.11) * fit;
+  /* one fixed corner made every sung word the same caption. The anchor rotates with the hook,
+     so the type is a thing placed in the frame per shot — and it is allowed to run off the edge,
+     which is how the references get their cropped, larger-than-screen words. */
+  const ANCH = [[0.045, 0.16, 'left'], [0.5, 0.9, 'center'], [0.045, 0.76, 'left'],
+                [0.5, 0.15, 'center'], [0.045, 0.44, 'left'], [0.5, 0.9, 'center']];
+  const a = ANCH[hs.indexOf(h) % ANCH.length];
+  const x = W * a[0], y = H * a[1];
   g.save();
   g.font = `300 ${size}px Georgia,"Times New Roman",serif`;
-  g.textAlign = 'left'; g.textBaseline = 'middle';
-  g.beginPath(); g.rect(0, 0, x + 12 + g.measureText(h.w).width * u + 4, H); g.clip();
+  g.textAlign = a[2]; g.textBaseline = 'middle';
+  const tw = g.measureText(h.w).width;
+  const left = a[2] === 'left' ? x : a[2] === 'right' ? x - tw : x - tw / 2;
+  g.beginPath(); g.rect(0, 0, left + 12 + tw * u + 4, H); g.clip();
   g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
   g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
   g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);
   g.restore();
   g.save();
   g.globalAlpha = clamp(u * 2); g.fillStyle = rgba(pal.rim, 0.34);
-  g.font = `300 ${Math.round(size * 0.2)}px Georgia,serif`;
-  g.textBaseline = 'middle';
-  g.fillText(h.cn, x + 2, y + size * 0.66);
+  g.font = `300 ${Math.round(size * 0.16)}px Georgia,serif`;
+  g.textAlign = a[2]; g.textBaseline = 'middle';
+  g.fillText(h.cn, x + 2, y + size * 0.62);
   g.restore();
 }
 
-window.MVL = { melody, display, pitch, beatAt, onBar, hooks, SHAPES, LOOK };
+/* ---------------- the machine's own surface ---------------- */
+/* Both reference MVs put a telemetry rail on the frame: the machine reports itself, and the
+   report carries the story instead of a drawn emotion. Mine is not authored — every value in
+   the right column is measured from the MP3 by analysis/music.html, so what the program says
+   about its own distance, texture and pitch is literally true at that frame. */
+const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function noteName(hz) {
+  const p = Math.round(12 * Math.log2(hz / 440)) + 69;
+  return NOTE[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 1);
+}
+function chrome(g, t, W, H, pal, F) {
+  const bt = beatAt(t), hz = pitch(t), flat = F ? F[14] : 0, rms = F ? F[8] : 0;   /* calibrated 0..1 */
+  const rows = [
+    ['state', t < 131.2 ? 'RUNNING' : t < 147.66 ? 'HALTED' : t < 169.82 ? 'SENTENCED' : t < 193 ? 'REWINDING' : 'EXITING'],
+    ['heart()', t < 124.89 ? 'uninitialised' : 'null'],
+    ['you()', t < 110.9 ? 'present' : 'null'],
+    ['pitch()', hz ? Math.round(hz) + ' Hz  ' + noteName(hz) : '— unvoiced'],
+    ['texture()', flat > 0.42 ? 'noise-like  ' + flat.toFixed(2) : 'tonal  ' + flat.toFixed(2)],
+    ['limit()', t < 184.54 ? 'not reached' : 'you'],
+  ];
+  /* The panel is the machine narrating itself, but on every frame it turned the film into a
+     dashboard — the contact sheet's right third was grey mush in all nine shots. It reports during
+     the acts where the machine is the subject and keeps out of the way while she is singing. */
+  const RAIL = [[0, 29.7], [110.9, 177.24], [193, 212.4]];
+  let vis = 0;
+  for (const r of RAIL) vis = Math.max(vis, Math.min(clamp((t - r[0]) / 0.9, 0, 1), clamp((r[1] - t) / 0.9, 0, 1)));
+  g.save();
+  g.globalAlpha = vis;
+  const y0 = H * 0.155, dy = H * 0.041;
+  /* the panel sits on a scrim: the sheet is the brightest thing in the room and light-on-light
+     text over it is unreadable, so the rail carries its own shadow */
+  const sx = W * 0.72;
+  const scrim = g.createLinearGradient(sx, 0, W, 0);
+  scrim.addColorStop(0, 'rgba(0,0,0,0)'); scrim.addColorStop(0.35, rgba(pal.room0, 0.82));
+  scrim.addColorStop(1, rgba(pal.room0, 0.94));
+  g.fillStyle = scrim; g.fillRect(sx, y0 - dy, W - sx, rows.length * dy + dy * 1.6);
+  g.font = `${Math.max(11, Math.round(H * 0.0147))}px ui-monospace,Consolas,monospace`;
+  g.textBaseline = 'middle';
+  rows.forEach((r, i) => {
+    const yy = y0 + i * dy, a = 0.42 + 0.12 * Math.sin((t * 1.6) + i);
+    g.textAlign = 'left'; g.fillStyle = rgba(pal.rim, a * 0.6); g.fillText(r[0], W * 0.775, yy);
+    g.textAlign = 'right'; g.fillStyle = r[1] === 'null' ? rgba(pal.accent, 0.85) : rgba(pal.rim, a);
+    g.fillText(r[1], W * 0.972, yy);
+    g.strokeStyle = rgba(pal.rim, 0.07); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(W * 0.775, yy + dy * 0.5); g.lineTo(W * 0.972, yy + dy * 0.5); g.stroke();
+  });
+  g.globalAlpha = 1;
+  /* the beat rail: the next eight bars, printed as ticks, with the playhead in the middle */
+  /* the beat rail: mapped by continuous time so it scrolls smoothly under a fixed playhead.
+     Indexing it by beat made the whole rail jump one tick sideways on every beat — the sweep
+     read that as two unattributed flashes, and the eye reads it as a stutter. */
+  const ry = H * 0.062, win = 32 * (60 / META.bpm);
+  let first = 0; while (first < M.beat.length - 1 && M.beat[first] < t - win / 2) first++;
+  let lastN = first; while (lastN < M.beat.length - 1 && M.beat[lastN] < t + win / 2) lastN++;
+  for (let i = first; i <= lastN; i++) {
+    const u = (M.beat[i] - t) / win + 0.5;
+    if (u < 0 || u > 1) continue;
+    const x = W * 0.032 + u * (W * 0.936);
+    const inBar = ((i - META.root) % 4 + 4) % 4;
+    const near = Math.abs(M.beat[i] - t) < 60 / META.bpm * 0.5;
+    const w = (M.beatOn[i] || 0) / 255;
+    g.strokeStyle = rgba(near ? pal.accent : pal.rim, near ? 0.95 : inBar === 0 ? 0.42 : 0.2);
+    g.lineWidth = near ? 2.4 : inBar === 0 ? 1.8 : 1;
+    const h = (inBar === 0 ? 13 : 7) + w * 9;
+    g.beginPath(); g.moveTo(x, ry - h / 2); g.lineTo(x, ry + h / 2); g.stroke();
+  }
+  g.textAlign = 'left'; g.fillStyle = rgba(pal.rim, 0.4);
+  g.fillText('bar ' + (bt.bar + 1) + '   ' + META.bpm.toFixed(2) + ' bpm   4/4', W * 0.032, ry - H * 0.03);
+  g.textAlign = 'right'; g.fillStyle = rgba(pal.accent, 0.55);
+  g.fillText('world.execute(me);', W * 0.968, ry - H * 0.03);
+  /* the level meter, driven by measured loudness */
+  const mw = W * 0.16, mx = W * 0.032, my = H * 0.93;
+  g.fillStyle = rgba(pal.rim, 0.1); g.fillRect(mx, my, mw, 3);
+  g.fillStyle = rgba(pal.accent, 0.7); g.fillRect(mx, my, mw * clamp(rms * 1.6, 0, 1), 3);
+  g.restore();
+}
+
+window.MVL = { melody, display, chrome, pitch, beatAt, onBar, hooks, SHAPES, LOOK, noteName };
+
 })();
