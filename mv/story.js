@@ -41,7 +41,9 @@ window.STORY = {
     /* the answer: a pale violet-cold light, gentler than the verses */
     reveal:    { room0: '#07070f', room1: '#181a33', page: '#e3e4f8', ink: '#1e2030', accent: '#c02a44', rim: '#c6cbee', glow: '#7f88d6', lum: 0.70 },
     /* the light going out of the room */
-    outro:     { room0: '#030406', room1: '#080b0f', page: '#7d8790', ink: '#12161a', accent: '#7a2230', rim: '#5d6a76', glow: '#46525e', lum: 0.12 }
+    /* the light going out of the room — an ember, not a grey tile: neutral grey at that size read
+       as an unlit prop, which is the same dead-frame mistake the globe made */
+    outro:     { room0: '#040305', room1: '#0d0806', page: '#8d7a63', ink: '#1a1410', accent: '#8f2a34', rim: '#7d6a58', glow: '#6b4a33', lum: 0.16 }
   },
 
   /* the LRC as an independent witness for the tempo estimate */

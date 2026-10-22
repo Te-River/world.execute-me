@@ -817,6 +817,14 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
       g.restore();
     }
     dust(g, L, F, 40);
+    /* once the report is taken away the room has no lamp left, so give the kneeling node a
+       floor-pool of its own — otherwise "heap quiet" reads as an empty frame, not as a survivor */
+    const px = DW * 0.56, py = GY - 20;
+    g.save(); g.globalCompositeOperation = 'lighter';
+    const pool = g.createRadialGradient(px, py, 0, px, py, 190);
+    pool.addColorStop(0, rgba(RIM, 0.1 + F[8] * 0.06)); pool.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = pool; g.fillRect(px - 190, py - 190, 380, 380);
+    g.restore();
     G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, F[8] * 0.18);
     /* the caret still blinks — nobody is typing — but it breathes rather than switching,
        so a half-second gate cannot read as a one-frame flash */
@@ -1042,7 +1050,9 @@ S.push({ id: 'powerdown', from: 193, to: 205.81,
       gg.strokeRect(W * 0.3, H * 0.24, W * 0.4, H * 0.52);
       gg.beginPath(); gg.moveTo(W * 0.5, H * 0.24); gg.lineTo(W * 0.5, H * 0.76);
       gg.moveTo(W * 0.3, H * 0.5); gg.lineTo(W * 0.7, H * 0.5); gg.stroke();
-      gg.fillStyle = rgba(col.glow, 1 - k); gg.fillRect(W * 0.3 + 2, H * 0.24 + 2, W * 0.4 - 4, H * 0.52 - 4);
+      /* stays lit, then falls: a linear fade off a dim plate just looks like a grey square */
+      gg.fillStyle = rgba(col.glow, Math.pow(1 - k, 0.55)); gg.fillRect(W * 0.3 + 2, H * 0.24 + 2, W * 0.4 - 4, H * 0.52 - 4);
+      gg.fillStyle = rgba(col.page, Math.pow(1 - k, 0.8) * 0.5); gg.fillRect(W * 0.42, H * 0.36, W * 0.16, H * 0.28);
     });
     endPage(g);
     G.subject(g, DW * 0.5, GY, 1.05 * (1 - k * 0.18), 'stand', -1, (1 - k) * F[8] * 0.4);
