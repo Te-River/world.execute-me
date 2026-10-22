@@ -93,14 +93,17 @@ function melody(g, t, W, H, pal, camZ) {
   const pts = [];
   for (let u = t - LOOK; u <= t + 1e-6; u += step) {
     const hz = pitch(u);
-    let x = xOf(u), y = hz ? yOf(hz) : rail, live = hz > 0;
+    /* quantised to the semitone it is singing, so a held note is one flat run instead of a
+       scatter of near-equal samples — the raw contour reads as a barcode at this compression */
+    let x = xOf(u), y = hz ? yOf(55 * Math.pow(2, Math.round(12 * Math.log2(hz / 55)) / 12)) : rail, live = hz > 0;
     const sh = shapeBlend(u);
     if (sh) {
       /* park the figure in the dark band to the right of the sheet. The page already carries the
          labelled diagram — the proof — so the stroke's shape must not compete with it; the line
          is the performance, and it takes the shape it is singing about out in the room. */
       const rad = Math.min(span * 0.5, W * 0.075);
-      const wide = sh.kind === 'bars' || sh.kind === 'flat';      const ax = rad * (wide ? 2.2 : 1), ay = rad * (wide ? 0.7 : 1);
+      const wide = sh.kind === 'bars' || sh.kind === 'flat';
+      const ax = rad * (wide ? 2.2 : 1), ay = rad * (wide ? 0.7 : 1);
       const sx = W * 0.875, cy = rail - span * 0.52;
       const q = shapePath(sh.kind, sh.s);
       const unwind = clamp((t - u - (LOOK - 2.4)) / 1.5, 0, 1);
@@ -146,7 +149,9 @@ function melody(g, t, W, H, pal, camZ) {
     };
     for (const p of pts) {
       if (!p.live) { flush(); continue; }
-      if (run.length && Math.abs(p.a - run[run.length - 1].a) > 0.12) flush();
+      /* a leap bigger than a fourth is not a slide, it is two notes: end the run, leave the gap */
+      if (run.length && (Math.abs(p.a - run[run.length - 1].a) > 0.12 ||
+          Math.abs(p.y - run[run.length - 1].y) > H * 0.03)) flush();
       run.push(p);
     }
     flush(); g.restore();

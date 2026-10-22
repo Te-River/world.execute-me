@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>scroll — the camera inside the sheet</title>
+<style>
+  body { background: #0d0f14; color: #cdd6f4; font: 13px/1.6 ui-monospace, Consolas, monospace; margin: 20px; }
+  canvas { display: block; background: #000; width: 960px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h1>候选 v5：满幅色场 + 沿时间轴滑行的摄影机</h1>
+<p>两张参考联系表给出的共同结论：占满画面的颜色、巨大的居中词、仪表框、遥读列。
+这一版把"黑房里一张小亮纸"换掉——整首歌的实测旋律是纸上的一条墨线，画面是沿它向右滑行的窗口。
+<button onclick="go()">render</button> <span id="st"></span></p>
+<div id="out"></div>
+<script src="../mv/music.data.js"></script>
+<script src="../mv/lyrics.js"></script>
+<script>
+const M = window.MUSIC, META = M.meta, HOP = META.hop / META.sr;
+const SW = 12000, SH = 900;                         /* the sheet: 56.65 px per second of music */
+const VW = 1920, VH = 1080, Z = 2.6;                /* the window sees 738 x 415 sheet px = 13 s */
+const PERS = SW / META.dur;
+const RY = SH * 0.62, SPAN = SH * 0.34;             /* the rail, and how tall a figure may be */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+const rgba = (s, a) => { const c = hex(s); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+
+/* one colour owns the frame; it changes where the song changes argument */
+function plate(t) {
+  if (t < 15) return { bg: '#10151c', ink: '#dfe7ef', red: '#e0455c', glow: '#7fa8cc', hot: 0.9 };
+  if (t < 44.45) return { bg: '#12233a', ink: '#e6eef7', red: '#e8506a', glow: '#5b9bd0', hot: 1.0 };   /* theorem */
+  if (t < 59.22) return { bg: '#1a2c3f', ink: '#eaf2f8', red: '#e8506a', glow: '#63a6cf', hot: 1.0 };   /* condition */
+  if (t < 74.04) return { bg: '#3a1420', ink: '#fbe9e0', red: '#ff5c72', glow: '#d9748a', hot: 1.15 };  /* chorus */
+  if (t < 88.58) return { bg: '#22301f', ink: '#eef5e6', red: '#e0685c', glow: '#8fbf7a', hot: 1.0 };   /* flesh */
+  if (t < 110.9) return { bg: '#2b1f38', ink: '#f0eaf8', red: '#e8506a', glow: '#a583d0', hot: 1.05 };  /* switches */
+  if (t < 131.22) return { bg: '#33241a', ink: '#f6ead6', red: '#e0603c', glow: '#c08a4e', hot: 0.85 }; /* absence */
+  if (t < 147.66) return { bg: '#0e1013', ink: '#c8d2da', red: '#9c3a48', glow: '#4e5f70', hot: 0.45 }; /* void */
+  if (t < 169.82) return { bg: '#6e0f1e', ink: '#ffe9e4', red: '#ff8f6a', glow: '#ff5c44', hot: 1.3 };  /* execution */
+  if (t < 177.24) return { bg: '#3d1420', ink: '#f7e2e6', red: '#ff6b78', glow: '#c9536a', hot: 1.0 };  /* rewind */
+  if (t < 193) return { bg: '#241f42', ink: '#eae7fb', red: '#e8506a', glow: '#7f7fd0', hot: 1.0 };     /* love */
+  return { bg: '#171013', ink: '#d8c6b4', red: '#a8402c', glow: '#6b4a34', hot: 0.5 };                  /* out */
+}
+function pitchAt(t) {
+  const i = t / HOP; if (i < 4 || i >= META.frames - 4) return 0;
+  const k = Math.floor(i / 4), f = i / 4 - k;
+  const a = M.f0[k * 4], b = M.f0[(k + 1) * 4]; if (!a || !b) return 0;
+  const hz = ((a + (b - a) * f) + (a + b) * 0.25) / 2.5 / 255 * 1100;
+  return hz > 55 ? hz : 0;
+}
+const ryOf = (hz) => RY - clamp(Math.log2(hz / 55) / Math.log2(1100 / 55), 0, 1) * SPAN;
+const barOf = (t) => (t - M.beat[0]) / (240 / META.bpm) + 1;
+
+/* figures and words, printed at their own moment on the sheet */
+const PRINT = [];
+window.LYRICS.forEach((l, i) => {
+  const caps = /^[A-Z0-9 .!?-]{4,}$/.test(l.en), title = l.en.indexOf('world.execute') >= 0;
+  if (!caps && !title) return;
+  const nxt = window.LYRICS[i + 1];
+  PRINT.push({ t: l.at, to: nxt ? Math.min(nxt.at, l.at + (title ? 5.4 : 3.0)) : l.at + 3.0, kind: 'word', w: l.en, cn: l.cn });
+});
+[['circle', 33.41], ['sine', 37.06], ['asym', 40.7], ['eye', 47.67], ['clock', 51.36], ['heart', 65.39],
+ ['specimen', 74.04], ['specimen', 77.57], ['specimen', 81.35], ['glyphs', 88.58], ['rings', 99.34],
+ ['star', 110.9], ['cutheart', 124.89], ['trace', 131.22], ['colonnade', 147.66], ['six', 158.9],
+ ['queue', 162.63], ['eq', 184.54], ['pane', 193]].forEach((p) => PRINT.push({ t: p[1], to: p[1] + 4.6, kind: p[0] }));
+
+function figure(g, m, P, h) {
+  g.lineWidth = 4; g.strokeStyle = P.ink; g.fillStyle = P.ink; g.textAlign = 'left';
+  if (m.kind === 'circle') { g.beginPath(); g.arc(0, 0, h * 0.40, 0, 6.283); g.stroke();
+    g.strokeStyle = P.red; g.lineWidth = 11; g.beginPath(); g.arc(0, 0, h * 0.40, -1.57, 2.3); g.stroke(); }
+  else if (m.kind === 'sine') { g.beginPath(); for (let i = 0; i <= 90; i++) { const u = i / 90, px = -h * 0.8 + u * h * 1.6, py = Math.sin(u * 6.283 * 1.5) * h * 0.28; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); }
+  else if (m.kind === 'asym') { g.beginPath(); for (let i = 0; i <= 90; i++) { const u = i / 90, px = -h * 0.8 + u * h * 1.6, py = h * 0.3 - h * 0.55 / (1 + Math.pow(u * 4.2, 2)); i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke();
+    g.setLineDash([14, 14]); g.strokeStyle = P.red; g.lineWidth = 5; g.beginPath(); g.moveTo(h * 0.56, -h * 0.42); g.lineTo(h * 0.56, h * 0.36); g.stroke(); g.setLineDash([]); }
+  else if (m.kind === 'eye') { g.beginPath(); g.ellipse(0, 0, h * 0.62, h * 0.26, 0, 0, 6.283); g.stroke(); g.fillStyle = P.red; g.beginPath(); g.arc(0, 0, h * 0.11, 0, 6.283); g.fill(); }
+  else if (m.kind === 'clock') { g.beginPath(); g.arc(0, 0, h * 0.36, 0, 6.283); g.stroke(); g.lineWidth = 7; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -h * 0.26); g.moveTo(0, 0); g.lineTo(h * 0.18, h * 0.06); g.stroke(); }
+  else if (m.kind === 'heart' || m.kind === 'cutheart') { const r = h * 0.3; g.lineWidth = 7; g.strokeStyle = P.red;
+    g.beginPath(); g.moveTo(0, r * 0.85); g.bezierCurveTo(-r * 1.35, -r * 0.25, -r * 0.5, -r * 1.15, 0, -r * 0.35);
+    g.bezierCurveTo(r * 0.5, -r * 1.15, r * 1.35, -r * 0.25, 0, r * 0.85); g.closePath(); g.stroke();
+    if (m.kind === 'cutheart') { g.fillStyle = P.bg; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r * 1.02, -1.97, -1.17); g.closePath(); g.fill(); } }
+  else if (m.kind === 'specimen') { g.lineWidth = 4; g.beginPath(); g.ellipse(0, h * 0.06, h * 0.2, h * 0.3, 0.2, 0, 6.283); g.stroke();
+    g.beginPath(); g.moveTo(-h * 0.06, -h * 0.24); g.lineTo(h * 0.04, -h * 0.38); g.lineTo(h * 0.14, -h * 0.22); g.stroke(); }
+  else if (m.kind === 'glyphs') { g.beginPath(); g.arc(-h * 0.26, -h * 0.08, h * 0.17, 0, 6.283); g.stroke();
+    g.beginPath(); g.arc(h * 0.26, -h * 0.14, h * 0.14, 0, 6.283); g.stroke();
+    g.beginPath(); g.moveTo(h * 0.36, -h * 0.04); g.lineTo(h * 0.48, -h * 0.16); g.moveTo(h * 0.42, -h * 0.16); g.lineTo(h * 0.42, -h * 0.02); g.stroke(); }
+  else if (m.kind === 'rings') { for (let i = 1; i <= 4; i++) { g.globalAlpha = 1 - i * 0.18; g.beginPath(); g.arc(0, 0, h * 0.12 * i, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
+  else if (m.kind === 'star') { for (let i = 0; i < 6; i++) { const a = -1.57 + i * 1.047;
+      g.lineWidth = 4; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * h * 0.42, Math.sin(a) * h * 0.34); g.stroke();
+      g.beginPath(); g.arc(Math.cos(a) * h * 0.42, Math.sin(a) * h * 0.34, h * 0.05, 0, 6.283); g.fill(); }
+    g.strokeStyle = P.red; g.beginPath(); g.arc(0, 0, h * 0.1, 0, 6.283); g.stroke(); }
+  else if (m.kind === 'trace') { g.strokeStyle = P.red; g.lineWidth = 4; g.strokeRect(-h * 0.52, -h * 0.4, h * 1.04, h * 0.7);
+    g.fillStyle = P.red; g.font = `500 ${h * 0.1}px ui-monospace,monospace`;
+    ['IllegalArgumentError', '  at world.execute(me.js:11)', '  at you.leave(me.js:14)', '  at me.love(me.js:7)'].forEach((s, i) =>
+      g.fillText(s, -h * 0.46, -h * 0.24 + i * h * 0.16)); }
+  else if (m.kind === 'colonnade') { for (let i = 0; i < 9; i++) { const x = -h * 0.8 + i * h * 0.2;
+      g.fillStyle = rgba(P.ink, 0.5); g.fillRect(x, -h * 0.44, h * 0.09, h * 0.88); } }
+  else if (m.kind === 'six') { g.textAlign = 'center'; g.font = `700 ${h * 0.3}px Georgia,serif`;
+    ['I', 'II', 'III'].forEach((s, i) => g.fillText(s, -h * 0.4 + i * h * 0.4, h * 0.1)); }
+  else if (m.kind === 'queue') { g.fillStyle = P.red; g.beginPath(); g.arc(h * 0.3, -h * 0.28, h * 0.07, 0, 6.283); g.fill();
+    for (let i = 0; i < 7; i++) { const x = -h * 0.6 + i * h * 0.16; g.strokeStyle = rgba(P.ink, 0.55); g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(h * 0.3, -h * 0.28); g.stroke(); g.beginPath(); g.arc(x, 0, h * 0.035, 0, 6.283); g.fill(); } }
+  else if (m.kind === 'eq') { g.font = `400 ${h * 0.16}px ui-monospace,monospace`; g.fillStyle = P.ink;
+    g.fillText('love(x) = lim x->inf', -h * 0.5, -h * 0.3); }
+  else if (m.kind === 'pane') { g.strokeStyle = P.ink; g.lineWidth = 4; g.strokeRect(-h * 0.2, -h * 0.3, h * 0.4, h * 0.5);
+    g.beginPath(); g.moveTo(0, -h * 0.3); g.lineTo(0, h * 0.2); g.moveTo(-h * 0.2, -h * 0.05); g.lineTo(h * 0.2, -h * 0.05); g.stroke(); }
+}
+
+function frame(t) {
+  const cv = document.createElement('canvas'); cv.width = VW; cv.height = VH;
+  const g = cv.getContext('2d');
+  const P = plate(t), span = VW / Z, camC = t * PERS;
+  g.fillStyle = P.bg; g.fillRect(0, 0, VW, VH);
+  g.save();
+  g.setTransform(Z, 0, 0, Z, VW / 2 - Z * camC, VH / 2 - Z * RY);
+  g.strokeStyle = rgba(P.ink, 0.18); g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(camC - span, RY); g.lineTo(camC + span, RY); g.stroke();
+  for (const m of PRINT) { if (m.kind === 'word') continue;
+    const x = m.t * PERS; if (x < camC - span * 0.62 || x > camC + span * 0.62) continue;
+    g.save(); g.translate(x, RY - SPAN * 0.5); figure(g, m, P, SPAN); g.restore(); }
+  g.lineWidth = 3.2; g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = rgba(P.ink, 0.9);
+  let run = [];
+  const flush = () => { if (run.length > 1) { g.beginPath(); run.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); } run = []; };
+  for (let u = Math.max(0, t - 14); u < Math.min(META.dur, t + 14); u += 0.02) {
+    const hz = pitchAt(u); if (!hz) { flush(); continue; } run.push([u * PERS, ryOf(hz)]);
+  }
+  flush();
+  g.restore();
+  /* the word being sung: enormous, cropped by the frame */
+  const w = PRINT.find((m) => m.kind === 'word' && t >= m.t && t < m.to);
+  if (w) {
+    const u = clamp((t - w.t) / (w.to - w.t), 0, 1), size = VH * 0.19;
+    const x = (w.t * PERS - camC) * Z + VW * 0.06, y = VH * 0.24;
+    g.save(); g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.font = `300 ${size}px Georgia,"Times New Roman",serif`;
+    g.beginPath(); g.rect(0, 0, x + 20 + g.measureText(w.w).width * u + 6, VH); g.clip();
+    g.fillStyle = rgba(P.red, 0.5); g.fillText(w.w, x - 6, y + 4);
+    g.fillStyle = rgba(P.glow, 0.5); g.fillText(w.w, x + 6, y - 4);
+    g.fillStyle = rgba(P.ink, 0.95); g.fillText(w.w, x, y);
+    g.restore();
+    g.save(); g.globalAlpha = clamp(u * 2); g.fillStyle = rgba(P.ink, 0.45);
+    g.font = `300 ${Math.round(size * 0.16)}px Georgia,serif`; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText(w.cn, x + 4, y + size * 0.62); g.restore();
+  }
+  /* the machine's own telemetry, reading as the argument goes */
+  g.save(); g.font = '13px ui-monospace,monospace'; g.fillStyle = rgba(P.ink, 0.42);
+  const rows = [['state', t < 131 ? 'RUNNING' : t < 147 ? 'HALTED' : t < 169 ? 'SENTENCED' : 'EXITING'],
+                ['heart', t < 124.89 ? 'uninitialised' : 'null'],
+                ['affection', 'unbounded'],
+                ['distance', t < 110.9 ? 'increasing' : 'infinite'],
+                ['you', t < 110.9 ? 'present' : 'null']];
+  rows.forEach((r, i) => g.fillText(r[0] + '()', 26, 150 + i * 26));
+  g.textAlign = 'right';
+  rows.forEach((r, i) => g.fillText(r[1], VW - 26, 150 + i * 26));
+  g.textAlign = 'left'; g.fillStyle = rgba(P.red, 0.8); g.fillRect(26, 60, VW - 52, 2);
+  g.font = '13px ui-monospace,monospace';
+  g.fillText('world.execute(me);  //  ' + t.toFixed(2) + ' s', 26, 50);
+  g.textAlign = 'right'; g.fillStyle = rgba(P.ink, 0.5);
+  g.fillText('bar ' + Math.floor(barOf(t)) + '   ' + META.bpm.toFixed(2) + ' bpm', VW - 26, 50); g.restore();
+  /* the lamp travels with the window */
+  const cx = VW / 2, cy = VH * 0.5;
+  g.save(); g.globalCompositeOperation = 'multiply';
+  const pool = g.createRadialGradient(cx, cy, VH * 0.14, cx, cy, VH * 1.05);
+  const q = Math.round(255 * clamp(P.hot, 0, 1));
+  pool.addColorStop(0, 'rgba(255,255,255,1)');
+  pool.addColorStop(0.4, `rgba(${q},${q},${Math.min(255, q + 10)},1)`);
+  pool.addColorStop(1, 'rgba(10,10,14,1)');
+  g.fillStyle = pool; g.fillRect(0, 0, VW, VH); g.restore();
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const bl = g.createRadialGradient(cx, cy, 0, cx, cy, VH * 0.8);
+  bl.addColorStop(0, rgba(P.glow, 0.1 * P.hot)); bl.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = bl; g.fillRect(0, 0, VW, VH); g.restore();
+  /* the playhead */
+  const hz = pitchAt(t), hy = hz ? cy + Z * (RY - ryOf(hz)) : cy;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const hd = g.createRadialGradient(cx, hy, 0, cx, hy, 80);
+  hd.addColorStop(0, rgba(P.ink, hz ? 0.75 : 0.14)); hd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hd; g.fillRect(cx - 80, hy - 80, 160, 160); g.restore();
+  g.fillStyle = rgba(P.ink, hz ? 0.95 : 0.3); g.beginPath(); g.arc(cx, hy, 5, 0, 6.283); g.fill();
+  g.save(); g.globalAlpha = 0.05;
+  for (let i = 0; i < 2200; i++) { g.fillStyle = i % 2 ? '#fff' : '#000'; g.fillRect((i * 7919) % VW, (i * 104729) % VH, 1.6, 1.6); }
+  g.restore();
+  return cv;
+}
+
+async function go() {
+  const out = document.getElementById('out'); out.innerHTML = '';
+  for (const t of [17, 36, 42, 66, 79, 112, 132, 150, 160, 190]) {
+    const cv = frame(t); out.appendChild(cv);
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9));
+    await fetch('/save-v5-' + t + '.jpg', { method: 'POST', body: blob });
+    document.getElementById('st').textContent = 'at ' + t + ' s';
+  }
+  document.getElementById('st').textContent = 'done';
+}
+go();
+</script>
+</body>
+</html>
