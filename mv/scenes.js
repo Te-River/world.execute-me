@@ -819,6 +819,42 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
   } });
 
 /* 5 — 59.22..74.04 s: the cursor, the heart, and the first EXECUTION */
+/* The trapped shot, shared by chorus1 and free so they stay literally one frame. The sheet sits in
+   the left half to reserve the room's right half for the cage - but the cage only drops partway
+   through each shot (70.08 s and 188.48 s), so the camera used to open on an empty half-frame and
+   simply wait there for up to eleven seconds. It now starts on the page and pans right, reaching the
+   two-shot on the beat the cage arrives. The arrival is keyed in seconds, not in k, because the two
+   shots are different lengths: the same gesture, landed at the right moment in each. */
+function trapFrame(cageAt, from, yDrift) {
+  return (k, t) => {
+    const p = clamp((t - (from + 0.5)) / Math.max(0.5, cageAt - 1.0 - from));
+    return { z: 1.02 - k * 0.07, arc: TRAP_TRAVEL,
+             x: lerp(DW * 0.30, DW * 0.55, p), y: DH * (0.46 + k * yDrift) };
+  };
+}
+/* The two-shot is a tight fit, and the numbers say how tight. What page() actually draws is the
+   sheet at 0.76 of L, so the paper occupies design x 227..713; the trap, and the heart the bars turn
+   out to be the outline of, occupy 1088..1472. At z 0.95 the frame reaches ~705 design px either
+   side of the target, so a camera that keeps both subjects whole has to stand in x 767..932 - a
+   165 px window, against a phrase travel of 248. That is why this shot asks for two fifths of it
+   instead of the whole of it, and lands on x 880 rather than mid-way between the two:
+   left at full travel, 360 fps sampling showed the descending phrase pulling the camera back to
+   x 584 at 71.2 s, exactly as the cage arrived, and the heart at 190.6 s sitting with three quarters
+   of its outline past the right edge. Both trap windows happen to fall in an odd-numbered phrase,
+   so the travel only ever pulls the same way here, and x stays in 781..880 across the whole hold. */
+const TRAP_TRAVEL = 0.40;
+const CAGE_W = DW * 0.24;
+/* u 0 is the bars entirely above the room, u 1 is them standing in it. It used to be the other
+   reading - the top edge travelled down until it met the bottom, so the cage collapsed into a 20 px
+   sliver on the floor in the last tenth of a second and the frame ended with nothing in the right
+   half. The song is still singing "trapped" there. */
+function trapCage(g, cx, u) {
+  const h = GY + 20 - DH * 0.06;
+  const top = lerp(-h, DH * 0.06, u);
+  g.strokeStyle = rgba(ACC, 0.55); g.lineWidth = 3.4;
+  G.cage(g, cx, top, top + h, CAGE_W, 5);
+}
+
 S.push({ id: 'chorus1', from: 59.22, to: 74.04,
   /* deliberately the same shot as 'free' at 188-192 s: same framing, same sheet rect, same cage
      geometry, same node. The song sings "trapped in this strange strange SIMULATION" at 73 s and
@@ -826,15 +862,13 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
      different word. That equation is the whole point of the piece, so the two frames have to be
      literally one frame, and the only thing allowed to change is the word and what the bars turn
      out to be the outline of. */
-  frame: (k) => ({ z: 1.06 - k * 0.06, x: DW * 0.52, y: DH * 0.46 }),
+  frame: trapFrame(70.08, 59.22, 0),
   draw(g, k, F, t, col) {
     const L = { x: 150, y: 176, w: 640, h: 470 };
     const cx = DW * 0.8;
     room(g, col, F, t, L, { reach: 1.8 });
     if (t > 70.08) {                                         /* we are trapped — behind the sheet */
-      const u = seg(t, 70.08, 73.6);
-      g.strokeStyle = rgba(ACC, 0.55); g.lineWidth = 3.4;
-      G.cage(g, cx, DH * 0.06 + u * (GY - DH * 0.06), GY + 20, DW * 0.3, 5);
+      trapCage(g, cx, seg(t, 70.08, 73.6));
     }
     page(g, col, L, { blur: 34 });
     const gu = seg(t, 59.22, 65.39);
@@ -1353,7 +1387,7 @@ S.push({ id: 'study', from: 177.24, to: 184.54,
    and never touches it, and the cage turns out to have been the outline of the heart all
    along, which is what "trapped in love" says in one image. */
 S.push({ id: 'free', from: 184.54, to: 193,
-  frame: (k) => ({ z: 1.06 - k * 0.06, x: DW * 0.52, y: DH * (0.46 + k * 0.04) }),
+  frame: trapFrame(188.48, 184.54, 0.04),
   draw(g, k, F, t, col) {
     /* the sheet moves to the left half so the room's own right half can hold the cage, and
        the cage is what turns into the heart — the reveal has to happen where the bars were,
@@ -1362,10 +1396,7 @@ S.push({ id: 'free', from: 184.54, to: 193,
     room(g, col, F, t, L, { reach: 1.8 });
     const v = seg(t, 188.48, 192.6);
     const cx = DW * 0.8;
-    if (v < 0.85) {
-      g.strokeStyle = rgba(ACC, 0.55); g.lineWidth = 3.4;
-      G.cage(g, cx, DH * 0.06 + v * (GY - DH * 0.06), GY + 20, DW * 0.3, 5);
-    }
+    if (v < 0.85) trapCage(g, cx, v);
     const u = oback(v);
     g.strokeStyle = ACC; g.lineWidth = 5; g.globalAlpha = clamp(v) * 0.9;
     g.save(); g.translate(cx, DH * 0.56); g.scale(u, u); G.heart(g, 0, 0, 150, false); g.restore();

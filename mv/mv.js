@@ -324,14 +324,15 @@ function cameraAt(t) {
   const cur = SCENES[i < 0 ? SCENES.length - 1 : i];
   const k = clamp01((t - cur.from) / (cur.to - cur.from));
   const f0 = frameOf(cur, k, t);
-  let f = { z: f0.z, x: f0.x, y: f0.y, shake: cur.shake || 0 };
+  let f = { z: f0.z, x: f0.x, y: f0.y, shake: cur.shake || 0, arc: f0.arc };
   const prev = i > 0 ? SCENES[i - 1] : null;
   if (prev) {
     const since = t - cur.from;
     if (since < SETTLE) {
       const u = since / SETTLE, pf = frameOf(prev, 1, t);
       f = { z: lerp(pf.z, f.z, u), x: lerp(pf.x, f.x, u), y: lerp(pf.y, f.y, u),
-            shake: Math.max(prev.shake || 0, f.shake) };
+            shake: Math.max(prev.shake || 0, f.shake),
+            arc: lerp(pf.arc === undefined ? 1 : pf.arc, f.arc === undefined ? 1 : f.arc, u) };
     }
   }
   /* The edit overrides the shot's own framing for as long as its segment lasts. A macro is taken
@@ -339,8 +340,8 @@ function cameraAt(t) {
   const ed = editAt(t);
   if (ed && ed.mode !== 0) {
     const S = sheetNow(t);
-    if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake }; }
-    else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake }; }
+    if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake, arc: f.arc }; }
+    else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake, arc: f.arc }; }
     if (t - ed.at < 0.06) f.editHard = true;
   }
   return f;
@@ -426,9 +427,12 @@ function cameraFor(t) {
   const ph = Math.floor(t / P), u = (t - ph * P) / P, arc = Math.sin(u * Math.PI);
   const dir = ph % 2 ? -1 : 1;
   const drift = window.MUSIC ? Math.sin(t * Math.PI * 2 / (32 * 60 / bpm)) * DW * 0.055 : 0;
-  lastCam = { z: camState.z * (1 + 0.2 * arc), x: camState.x + drift + arc * DW * 0.1 * dir,
-              y: camState.y - arc * DH * 0.035, shake: f.shake,
-              roll: arc * 0.022 * dir };
+  /* A shot that is holding two subjects at once may ask for less of this travel, because the travel
+     is what would carry one of them out of frame. See trapFrame in scenes.js for the arithmetic. */
+  const tv = f.arc === undefined ? 1 : f.arc;
+  lastCam = { z: camState.z * (1 + 0.2 * arc * tv), x: camState.x + (drift + arc * DW * 0.1 * dir) * tv,
+              y: camState.y - arc * DH * 0.035 * tv, shake: f.shake,
+              roll: arc * 0.022 * dir * tv };
   boundToSheet(lastCam, t, hard, sc);
   /* The closer the camera, the fewer the layers. A 360 fps strip of the macro showed why: blown up,
      the ledger's grey boxes, the telemetry column and the dust all sit at the same visual weight as
@@ -706,6 +710,11 @@ function render(ts) {
   } else {
     renderScene(bx, idx, t, cam);
   }
+  /* The rail goes over the picture it describes. The telemetry panel above deliberately does not:
+     it carries a scrim across the right quarter of the frame, and lifted over the scenes it would
+     repaint the room's right half - which is where the trap, the survivor and the heart stand - every
+     time it decides to report. It stays a fixture of the room and the shots are authored around it. */
+  if (window.MUSIC) MVL.rail(bx, t, W, HH, pal, raw);
   composite(t, reduced);
   updateText(t); updateHUD(t); drawPlayhead(t);
   /* a scene that throws is caught inside renderScene, so say so on screen —

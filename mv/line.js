@@ -250,7 +250,7 @@ function noteName(hz) {
   return NOTE[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 1);
 }
 function chrome(g, t, W, H, pal, F) {
-  const bt = beatAt(t), hz = pitch(t), flat = F ? F[14] : 0, rms = F ? F[8] : 0;   /* calibrated 0..1 */
+  const hz = pitch(t), flat = F ? F[14] : 0;   /* calibrated 0..1 */
   /* Four of these rows are discrete states rather than live measurements, and a state flip used to
      land as a one-frame text swap - the sweep caught 'uninitialised' becoming 'null' at 124.89 and
      read it as an element popping. A readout is allowed to change; it is not allowed to jump, so a
@@ -307,7 +307,18 @@ function chrome(g, t, W, H, pal, F) {
     g.beginPath(); g.moveTo(W * 0.775, yy + dy * 0.5); g.lineTo(W * 0.972, yy + dy * 0.5); g.stroke();
   });
   g.globalAlpha = 1;
-  /* the beat rail: the next eight bars, printed as ticks, with the playhead in the middle */
+  g.restore();
+}
+/* The beat rail, the bar counter, the signature and the level meter — the film's chrome, and the one
+   layer that has to sit above the picture rather than inside it. It used to be drawn in the same pass
+   as the telemetry panel, before any scene ran, so a scene could paint over it: at 73.5 s the trap's
+   bars march straight through world.execute(me);, and wherever the sheet reaches the rail the page
+   covers the ticks. A readout the picture is allowed to overwrite is not a readout. */
+function rail(g, t, W, H, pal, F) {
+  const bt = beatAt(t), rms = F ? F[8] : 0;
+  g.save();
+  g.font = `${Math.max(11, Math.round(H * 0.0147))}px ui-monospace,Consolas,monospace`;
+  g.textBaseline = 'middle';
   /* the beat rail: mapped by continuous time so it scrolls smoothly under a fixed playhead.
      Indexing it by beat made the whole rail jump one tick sideways on every beat — the sweep
      read that as two unattributed flashes, and the eye reads it as a stutter. */
@@ -337,6 +348,6 @@ function chrome(g, t, W, H, pal, F) {
   g.restore();
 }
 
-window.MVL = { melody, display, chrome, pitch, beatAt, onBar, hooks, SHAPES, LOOK, noteName };
+window.MVL = { melody, display, chrome, rail, pitch, beatAt, onBar, hooks, SHAPES, LOOK, noteName };
 
 })();

@@ -21,8 +21,9 @@
  * Use it from the console on index.html served over http (it needs to POST the sheets):
  *   document.head.appendChild(Object.assign(document.createElement('script'),
  *     { src: '/analysis/verify.js' }))
- *   VERIFY.start()            // returns immediately, sweeps in the background
- *   VERIFY.status()           // {n, N, done}
+ *   VERIFY.start(360)         // builds the sweep state; renders nothing yet
+ *   VERIFY.drive(8000)        // sweeps for 8 s of work, returns {n, N, done}
+ *   ... repeat drive() until done, then:
  *   await VERIFY.report()     // writes verify-60fps.png + sheet-a/b.jpg via POST /save-*
  */
 (() => {
@@ -126,21 +127,49 @@ function start(rate) {
   }
 
   let f = 0;
-  const ch = new MessageChannel();
-  /* A message port per frame keeps the sweep fast but can starve every other task source:
-     once the frames got cheap enough to draw in ~2 ms, the page stopped answering the
-     console. Every YIELD frames, hand off through a timer so the tab stays usable. */
-  const YIELD = 600;
-  ch.port1.onmessage = () => {
-    try { frame(f); }
-    catch (e) { S.flags.push([f, 'threw', e.message]); }
-    f++; S.n = f;
-    if (f >= S.N) { S.done = true; return; }
-    if (f % YIELD === 0) setTimeout(() => ch.port2.postMessage(0), 0);
-    else ch.port2.postMessage(0);
+  /* No self-driving pump. Measured, not theorised: a sweep that hands off to an async callback - a
+     timer, or the completion of a fetch - stops dead after its first batch on this browser surface
+     and sits there while the caller waits. One run of 76,287 frames, four minutes of arithmetic at
+     3.5 ms a frame, went ninety-five minutes without passing frame 240 again. So the state is built
+     here and driven from outside: whatever the tab does between two calls, the arrays and the frame
+     counter live in the page and nothing is lost, and each call answers before it can be frozen. */
+  S.drive = (ms) => {
+    const stop = performance.now() + ms;
+    while (f < S.N && performance.now() < stop) {
+      try { frame(f); }
+      catch (e) { S.flags.push([f, 'threw', e.message]); }
+      f++; S.n = f;
+    }
+    if (f >= S.N && !S.done) { S.done = true; finish(); }
+    return { n: f, N: S.N, done: S.done, flags: S.flags.length,
+             seconds: +((performance.now() - S.t0) / 1000).toFixed(1) };
   };
-  ch.port2.postMessage(0);
   return { frames: N, fps: rate, seconds: +DUR.toFixed(2) };
+}
+
+function drive(ms) {
+  return S && S.drive ? S.drive(ms === undefined ? 8000 : ms) : { started: false };
+}
+
+async function post(name, body) {
+  try { await fetch('/save-' + name, { method: 'POST', body: body }); } catch (e) { /* sink gone */ }
+}
+
+async function finish() {
+  /* The answer has to survive the tab. Everything the report needs is derivable from the arrays, so
+     write the derived summary, not the raw one: 76k frames of per-frame numbers is 2 MB of JSON that
+     nobody reads, while the verdict is three lines and a list of unattributed spikes. */
+  try {
+    const st = stats();
+    await post('sweep.json', JSON.stringify({
+      status: status(),
+      spikes: st.fl.length,
+      causes: st.fl.reduce((m, x) => (m[x.cause] = (m[x.cause] || 0) + 1, m), {}),
+      flashes: st.fl.filter((x) => x.cause === 'FLASH'),
+      flags: st.flags.filter((x) => x[1] === 'dark' || x[1] === 'blown' || x[1] === 'threw').slice(0, 40),
+      perAct: st.perAct,
+    }));
+  } catch (e) { await post('sweep.json', '{"failed":"' + e.message + '"}'); }
 }
 
 function status() {
@@ -580,6 +609,6 @@ async function deadzone(step) {
   return rows;
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing, crop, deadzone };
+window.VERIFY = { start, drive, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing, crop, deadzone };
 return 'VERIFY ready';
 })();
