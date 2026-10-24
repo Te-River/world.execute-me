@@ -148,18 +148,25 @@ function melody(g, t, W, H, pal, camZ) {
       run = [];
     };
     for (const p of pts) {
+      /* Only silence breaks the line. This used to end the run on any leap bigger than a fourth
+         too, "because a leap is two notes, not a slide" - but a leap is the single most melodic
+         thing a line does, and cutting it there shattered the contour into dozens of two-to-four
+         sample fragments. Read at print size those fragments were indistinguishable from noise:
+         a scatter of angular ticks with no start, no end, and nothing to measure against. */
       if (!p.live) { flush(); continue; }
-      /* a leap bigger than a fourth is not a slide, it is two notes: end the run, leave the gap */
-      if (run.length && (Math.abs(p.a - run[run.length - 1].a) > 0.12 ||
-          Math.abs(p.y - run[run.length - 1].y) > H * 0.03)) flush();
       run.push(p);
     }
     flush(); g.restore();
   };
   stroke(false, 0.44, false);                                 /* the sung line: one solid stroke */
   stroke(true, 0.2, true);                                    /* its reflection: dashed, faint */
-  g.strokeStyle = rgba(pal.rim, 0.1); g.lineWidth = 1;
+  /* the rail is the line's ground: it is where the pitch rests when nothing is sung, so without it
+     the contour is marks floating in a field with nothing to measure against. It used to sit at
+     alpha 0.1, which is not a line but a rumour of one - and a rumour cannot anchor a shape. */
+  g.strokeStyle = rgba(pal.rim, 0.26); g.lineWidth = 1.2;
   g.beginPath(); g.moveTo(0, rail); g.lineTo(W, rail); g.stroke();
+  g.strokeStyle = rgba(pal.rim, 0.1); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, rail - span); g.lineTo(W, rail - span); g.stroke();
   const last = pts[pts.length - 1], hy = last.y;
   g.save(); g.globalCompositeOperation = 'lighter';
   const halo = g.createRadialGradient(last.x, hy, 0, last.x, hy, 46);
