@@ -522,10 +522,13 @@ const PROGRAM = [
 const RUNTIME = { from: 9, n: 10 };
 const CRIM_DIM = 'rgba(120,96,92,.55)';
 /* the warrant: crimson ink on the one bright sheet in a room that has gone red */
-function code(g, L, active, strikeFrom) {
+function code(g, L, active, strikeFrom, offFrom) {
   const lh = L.h / RUNTIME.n, fs = Math.round(lh * 0.44);
   for (let i = 0; i < RUNTIME.n; i++) {
     const idx = RUNTIME.from + i, ln = PROGRAM[idx], yy = i * lh + lh / 2;
+    /* offFrom: the lines at or past it have already been unwritten, so they are not drawn at all.
+       The powerdown needs the program to come *apart*, not merely to be struck through. */
+    if (offFrom !== undefined && idx >= offFrom) continue;
     const done = active === undefined || idx <= active;
     if (idx === active) { g.fillStyle = rgba(ACC, 0.16); g.fillRect(-10, yy - lh / 2, L.w + 20, lh); }
     g.fillStyle = idx === active ? ACC : (done ? tint(ACC, '#000000', 0.18) : CRIM_DIM);
@@ -1398,15 +1401,21 @@ S.push({ id: 'powerdown', from: 193, to: 205.81,
     room(g, col, F, t, L, { reach: 1.2 });
     page(g, col, L, { blur: 16 });
     on(g, L, (gg, W, H) => {
-      gg.strokeStyle = rgba(INK, 0.5); gg.lineWidth = 2;
-      gg.strokeRect(W * 0.3, H * 0.24, W * 0.4, H * 0.52);
-      gg.beginPath(); gg.moveTo(W * 0.5, H * 0.24); gg.lineTo(W * 0.5, H * 0.76);
-      gg.moveTo(W * 0.3, H * 0.5); gg.lineTo(W * 0.7, H * 0.5); gg.stroke();
-      /* stays lit, then falls: a linear fade off a dim plate just looks like a grey square.
-         Reverted once: replacing this with a travelling boundary made the scene's per-bar motion
-         fall from 34.6 to 8.6, because the pane is a small area and only its edge was moving. */
-      gg.fillStyle = rgba(col.glow, Math.pow(1 - k, 0.55)); gg.fillRect(W * 0.3 + 2, H * 0.24 + 2, W * 0.4 - 4, H * 0.52 - 4);
-      gg.fillStyle = rgba(col.page, Math.pow(1 - k, 0.8) * 0.5); gg.fillRect(W * 0.42, H * 0.36, W * 0.16, H * 0.28);
+      /* The state row has read REWINDING since 193 s, so the program takes itself back apart -
+         last line written first - until the sheet holds nothing she typed. This shot is thirteen
+         seconds of purely instrumental music and it used to carry one abstract object: a square
+         quartered by a cross with a bright middle. In a film whose page otherwise only ever holds
+         a sign - code, a circle, a heart, F and M - that pane was the single thing that meant
+         nothing, and it was the only thing on the paper for the longest quiet stretch in the movie.
+         Lines 18 and 19 stay struck through as they go, because they were never executable. */
+      const off = 19 - Math.floor(k * 10.5);
+      code(gg, { x: 0, y: 0, w: W, h: H }, undefined, 18, off);
+      /* what the rewind cannot take back: the heart she drew by hand, bottom right, still lit as
+         the rest of the sheet dims - the setup for the last shot, which is nothing else */
+      const left = 1 - k * 0.55;
+      gg.save(); gg.globalAlpha = left; gg.strokeStyle = INK; gg.lineWidth = 2.2;
+      G.heart(gg, W * 0.86, H * 0.82, H * 0.075, false);
+      gg.restore();
     });
     endPage(g);
     G.subject(g, DW * 0.5, GY, 1.05 * (1 - k * 0.18), 'stand', -1, (1 - k) * F[8] * 0.4);
