@@ -437,23 +437,28 @@ function page(g, col, L, o) {
   g.scale(0.76, 0.84); g.translate(-mcx, -mcy);
   /* the cast bloom: a blurred copy of the sheet lying behind it */
   g.save(); g.filter = `blur(${o.blur === undefined ? 26 : o.blur}px)`;
-  g.fillStyle = rgba(col.page, 0.34 + col.lum * 0.2);
+  g.fillStyle = rgba(col.page, 0.44 - col.lum * 0.16);
   g.fillRect(L.x - L.w * 0.09, L.y - L.h * 0.09, L.w * 1.18, L.h * 1.18);
   g.restore();
   const pg = g.createLinearGradient(L.x, L.y, L.x + L.w * 0.78, L.y + L.h);
   /* The sheet has to be an EMITTER, not a lit card. Every earlier pass over-corrected toward
      "don't blow it out" and ended with grey MDF in a dark room — which silently cancelled the one
      premise the whole film rests on. The near corner is allowed to clip; the ink then reads as
-     silhouette against a light source rather than as drawing on a whiteboard. */
-  pg.addColorStop(0, tint(col.page, '#ffffff', 0.62));
-  pg.addColorStop(0.14, tint(col.page, '#ffffff', 0.22));
+     silhouette against a light source rather than as drawing on a whiteboard.
+
+     But the glare has to scale the other way from the room's brightness. At 99.8 s, on the film's
+     brightest plate (lum 0.86), the hot corner washed the sonar rings out of the top-left quarter
+     of the page - and those rings are what that shot is saying. A dark room needs the page to
+     light it; a room already full of light does not need it added again. */
+  pg.addColorStop(0, tint(col.page, '#ffffff', 0.56));
+  pg.addColorStop(0.14, tint(col.page, '#ffffff', 0.19));
   pg.addColorStop(0.42, tint(col.page, col.glow, 0.34));
   pg.addColorStop(1, tint(col.page, col.room0, 0.5));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
   g.save(); g.globalCompositeOperation = 'lighter';
   const hot = g.createRadialGradient(L.x + L.w * 0.2, L.y + L.h * 0.18, 0,
                                      L.x + L.w * 0.2, L.y + L.h * 0.18, L.w * 0.85);
-  hot.addColorStop(0, rgba(col.page, 0.18 + col.lum * 0.12));
+  hot.addColorStop(0, rgba(col.page, 0.26 - col.lum * 0.15));
   hot.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = hot; g.fillRect(L.x, L.y, L.w, L.h);
   g.restore();
