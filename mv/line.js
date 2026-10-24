@@ -269,6 +269,7 @@ function chrome(g, t, W, H, pal, F) {
   const RAIL = [[0, 29.7], [110.9, 177.24], [193, 212.4]];
   let vis = 0;
   for (const r of RAIL) vis = Math.max(vis, Math.min(clamp((t - r[0]) / 0.9, 0, 1), clamp((r[1] - t) / 0.9, 0, 1)));
+  if (window.EDIT === 1) vis = 0;      /* the readout is a wide-shot element; pushed in it is clutter */
   g.save();
   g.globalAlpha = vis;
   const y0 = H * 0.155, dy = H * 0.041;

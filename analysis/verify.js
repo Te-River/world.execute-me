@@ -341,6 +341,91 @@ function smoke() {
   return errs.length ? errs : ['ok'];
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke };
+/* ---------------- looking, at the frame level ---------------- */
+/* Everything else in this file reduces a frame to a handful of scalars, and scalars hide the
+   specific thing that ruins a picture: a layer that strobes in one corner contributes almost
+   nothing to a whole-frame mean. These two functions stop summarising. Both render the stage at
+   1080P and step the clock at 360 fps, so adjacent frames are 2.8 ms apart - closer than any
+   display will ever show the film. */
+function stage1080() {
+  const cv = document.getElementById('stage');
+  cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
+  dispatchEvent(new Event('resize'));
+  return cv;
+}
+function grab(cv, scratch) {
+  const q = scratch.getContext('2d');
+  q.clearRect(0, 0, scratch.width, scratch.height);
+  q.drawImage(cv, 0, 0);
+  return q.getImageData(0, 0, scratch.width, scratch.height).data;
+}
+
+/* For every pixel, the largest change it showed between any two adjacent frames of the burst. */
+async function burst(t0, n, name, rate) {
+  rate = rate || 360;
+  const cv = stage1080(), W = cv.width, H = cv.height, N = W * H;
+  const scratch = document.createElement('canvas'); scratch.width = W; scratch.height = H;
+  const acc = new Float32Array(N);
+  let prev = null;
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i / rate;
+    window.MV.pin(t); window.MV.step(t * 1000);
+    const d = grab(cv, scratch);
+    if (prev) for (let p = 0, q = 0; p < N; p++, q += 4) {
+      const v = Math.abs(d[q] - prev[q]) + Math.abs(d[q + 1] - prev[q + 1]) + Math.abs(d[q + 2] - prev[q + 2]);
+      if (v > acc[p]) acc[p] = v;
+    }
+    prev = d.slice();
+  }
+  /* the heat map, plus a grid so the answer is also a number and not only a picture */
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const g = out.getContext('2d'), im = g.createImageData(W, H);
+  let sum = 0, peak = 0, hist = new Float32Array(40), gx = 8, gy = 5;
+  const cell = new Float32Array(gx * gy), cellN = new Float32Array(gx * gy);
+  for (let p = 0; p < N; p++) {
+    const v = acc[p]; sum += v; if (v > peak) peak = v;
+    hist[Math.min(39, v >> 2)]++;
+    const x = p % W, y = (p / W) | 0;
+    const ci = ((y * gy / H) | 0) * gx + ((x * gx / W) | 0);
+    cell[ci] += v; cellN[ci]++;
+    const c = Math.min(255, v * 5);
+    const o = p * 4;
+    im.data[o] = c; im.data[o + 1] = Math.min(255, c * 0.45); im.data[o + 2] = 0; im.data[o + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  const blobs = [];
+  for (let i = 0; i < cell.length; i++) if (cellN[i]) {
+    blobs.push({ cell: (i % gx) + ',' + ((i / gx) | 0), mean: +(cell[i] / cellN[i]).toFixed(1) });
+  }
+  blobs.sort((a, b) => b.mean - a.mean);
+  const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.93));
+  await fetch('/save-' + name, { method: 'POST', body: blob });
+  return { t0: t0, n: n, rate: rate, px: W + 'x' + H, mean: +(sum / N).toFixed(1), peak: peak | 0,
+           hotCells: blobs.slice(0, 5), quietPct: +(hist[0] / N * 100).toFixed(1) };
+}
+
+/* The consecutive frames themselves, tiled, so the sequence can actually be read. */
+async function strip(t0, n, name, rate, cols) {
+  rate = rate || 360; cols = cols || 3;
+  const cv = stage1080(), W = cv.width, H = cv.height;
+  const scratch = document.createElement('canvas'); scratch.width = W; scratch.height = H;
+  const cw = 640, ch = 360, rows = Math.ceil(n / cols);
+  const out = document.createElement('canvas'); out.width = cols * cw; out.height = rows * ch;
+  const g = out.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, out.width, out.height);
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i / rate;
+    window.MV.pin(t); window.MV.step(t * 1000);
+    g.drawImage(cv, (i % cols) * cw, ((i / cols) | 0) * ch, cw, ch);
+    g.strokeStyle = '#2a2a2a'; g.strokeRect((i % cols) * cw, ((i / cols) | 0) * ch, cw, ch);
+    g.fillStyle = '#fff'; g.font = '18px ui-monospace,monospace';
+    g.fillText('+' + (i / rate * 1000).toFixed(1) + 'ms', (i % cols) * cw + 8, ((i / cols) | 0) * ch + 24);
+  }
+  const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.93));
+  await fetch('/save-' + name, { method: 'POST', body: blob });
+  return { t0: t0, n: n, ms: (n / rate * 1000).toFixed(1), sheet: out.width + 'x' + out.height };
+}
+
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip };
 return 'VERIFY ready';
 })();

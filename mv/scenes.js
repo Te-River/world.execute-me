@@ -366,6 +366,7 @@ const GIVEN = [
 ];
 let TT = 0;
 function givings(g, L) {
+  if (window.EDIT === 1) return;      /* see dust(): a close-up keeps only what the shot is about */
   /* What stays on the sheet is the hole, not the label: the word is legible while she sings it and
      collapses afterwards into an empty dashed box, so the accumulation reads as a column of gaps
      down the edge of the page rather than as a second diagram competing with the first. */
@@ -455,6 +456,7 @@ function endPage(g) { g.restore(); g.restore(); }   /* the clip, then the board'
 
 /* dust in the beam — only where the light reaches */
 function dust(g, L, F, n) {
+  if (window.EDIT === 1) return;      /* pushed in, the motes are dirt on the lens, not atmosphere */
   const cx = L.x + L.w / 2, cy = L.y + L.h / 2;
   for (let i = 0; i < n; i++) {
     const a = (i * 2.399963) % TAU, r = Math.sqrt((i * 0.6180339887) % 1) * Math.max(L.w, L.h) * 1.15;

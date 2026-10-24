@@ -166,7 +166,12 @@ function applyCamera(g, fr, t) {
   const scale = fitScale() * fr.z * breath * (1 + accent) * (1 + (fr.shake || 0) * punch * 0.012);
   let sx = 0, sy = 0;
   if (fr.shake) { const a = fr.shake * punch * 13; sx = Math.sin(t * 33.7) * a; sy = Math.cos(t * 27.1) * a; }
-  g.setTransform(scale, 0, 0, scale, W / 2 - fr.x * scale + sx, HH / 2 - fr.y * scale + sy);
+  /* screen = centre + R(roll) * scale * (design - cam), so the roll is the camera leaning, not the
+     picture being tilted after the fact */
+  const r = fr.roll || 0, ca = Math.cos(r), sa = Math.sin(r);
+  g.setTransform(scale * ca, scale * sa, -scale * sa, scale * ca,
+                 W / 2 - scale * (ca * fr.x - sa * fr.y) + sx,
+                 HH / 2 - scale * (sa * fr.x + ca * fr.y) + sy);
 }
 const WIDE = { z: 1.05, x: DW / 2, y: DH / 2 };
 function frameOf(sc, k, t) {
@@ -258,6 +263,9 @@ function updatePalette(t, dt) {
 function drawRoom(t, cam) {
   const g = bx;
   g.setTransform(1, 0, 0, 1, 0, 0);
+  /* the hall rolls with everything else, or the horizon stays level while the sheet leans and the
+     roll reads as a crooked object instead of a moving camera; 1.06 covers the corner swing */
+  if (cam.roll) { g.translate(W / 2, HH / 2); g.rotate(cam.roll); g.scale(1.06, 1.06); g.translate(-W / 2, -HH / 2); }
   /* The hall is drawn in **screen** space, deliberately outside the sheet's camera matrix. Until
      now the floor belonged to the design space, so it slid along with the paper and the two could
      never disagree — and a room where nothing disagrees about the camera is a flat picture. Drawn
@@ -322,7 +330,7 @@ function cameraAt(t) {
   const ed = editAt(t);
   if (ed && ed.mode !== 0) {
     const S = window.SHEET;
-    if (ed.mode === 1 && S) { f = { z: f.z * 2.35, x: S.x + S.w / 2, y: S.y + S.h * 0.44, shake: f.shake }; }
+    if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake }; }
     else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake }; }
     if (t - ed.at < 0.06) f.editHard = true;
   }
@@ -350,12 +358,28 @@ function cameraFor(t) {
     camState.y += (f.y - camState.y) * a;
   }
   camStateT = t;
-  /* One slow lateral sweep per eight bars. The hall answers cam.x at 0.55x and the sheet at 1x, so
-     the two slide past each other while nothing inside either one moves — that disagreement is the
-     difference between a set and a room. Applied after the smoothing state, never fed back into it,
-     or the drift would compound itself. */
-  const drift = window.MUSIC ? Math.sin(t * Math.PI * 2 / (32 * 60 / window.MUSIC.meta.bpm)) * DW * 0.055 : 0;
-  lastCam = { z: camState.z, x: camState.x + drift, y: camState.y, shake: f.shake };
+  /* Measured before this existed: at 360 fps the average pixel moved 0.63 out of 765 between
+     adjacent frames and only 0.32% of pixels moved at all. The film was a slow zoom on a
+     photograph. So every shot now travels - the camera crosses a tenth of the room, pushes in by a
+     fifth and rolls across a four-bar phrase, alternating direction so the next phrase starts where
+     this one ended. sin(u*PI) is zero at both seams, so nothing can jump, and the offsets are added
+     after the smoothing state rather than into it, or they would compound themselves. The lateral
+     sweep stays: the hall answers cam.x at 0.55x and the sheet at 1x, so the two disagree, and that
+     disagreement is what makes it a room rather than a backdrop. */
+  const bpm = window.MUSIC ? window.MUSIC.meta.bpm : 128;
+  const P = 16 * 60 / bpm;
+  const ph = Math.floor(t / P), u = (t - ph * P) / P, arc = Math.sin(u * Math.PI);
+  const dir = ph % 2 ? -1 : 1;
+  const drift = window.MUSIC ? Math.sin(t * Math.PI * 2 / (32 * 60 / bpm)) * DW * 0.055 : 0;
+  lastCam = { z: camState.z * (1 + 0.2 * arc), x: camState.x + drift + arc * DW * 0.1 * dir,
+              y: camState.y - arc * DH * 0.035, shake: f.shake,
+              roll: arc * 0.022 * dir };
+  /* The closer the camera, the fewer the layers. A 360 fps strip of the macro showed why: blown up,
+     the ledger's grey boxes, the telemetry column and the dust all sit at the same visual weight as
+     the diagram, so the close-up had no thing to look at and a dead band of room down its right
+     edge. A real camera simplifies as it pushes in; this one now does too. */
+  const ed = editAt(t);
+  window.EDIT = ed ? ed.mode : 0;
   return lastCam;
 }
 
