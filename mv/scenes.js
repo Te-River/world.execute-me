@@ -614,7 +614,42 @@ S.push({ id: 'globe', from: 16, to: 29.7,
     lit.addColorStop(0.42, tint(col.page, col.room1, 0.22));
     lit.addColorStop(1, tint(col.room1, '#000000', 0.62));
     g.fillStyle = lit; g.fillRect(L.x, L.y, L.w, L.h);
-    g.fillStyle = rgba(col.glow, 0.5); g.fillRect(L.x, DH * 0.46 + 60, L.w, 200);
+    /* A lit sphere still read as a white balloon for ten seconds: a gradient tells you where the
+       light is, but only something wrapping around the surface tells you the surface is curved.
+       So the world gets its mesh - parallels, and meridians that compress to nothing at the limbs
+       as it turns. One revolution every four bars, so the thing is visibly spinning to the beat
+       rather than sitting there being lit. */
+    const cx = DW * 0.5, cy = DH * 0.46, spin = t * TAU / 7.5;
+    g.strokeStyle = rgba(col.rim, 0.3); g.lineWidth = 1.5;
+    for (let i = -2; i <= 2; i++) {
+      const la = i * 0.42, hw = r * Math.cos(la);
+      g.beginPath(); g.ellipse(cx, cy + r * Math.sin(la), hw, hw * 0.17, 0, 0, TAU); inkStroke(g);
+    }
+    for (let i = 0; i < 6; i++) {
+      const w = Math.cos(spin + i * Math.PI / 6);
+      if (Math.abs(w) < 0.04) continue;
+      g.strokeStyle = rgba(col.rim, 0.16 + Math.abs(w) * 0.2);
+      g.beginPath(); g.ellipse(cx, cy, r * Math.abs(w), r, 0, 0, TAU); inkStroke(g);
+    }
+    /* the near side carries nodes, and they ride the surface: a dot that slides along a parallel is
+       the second thing that says "this is a body you are looking at from outside" */
+    for (let i = 0; i < 11; i++) {
+      const la = (i % 5 - 2) * 0.42, lon = spin + i * 1.9, cw = Math.cos(lon);
+      if (cw < 0.05) continue;                                  /* the far side is hidden */
+      const hw = r * Math.cos(la);
+      const nx = cx + hw * Math.sin(lon), ny = cy + r * Math.sin(la) + hw * 0.17 * cw;
+      /* two nodes once landed symmetrically just above "execute" and spelled a fake umlaut. The
+         title is the one thing on this body that has to stay readable, so nothing sits in its band */
+      if (Math.abs(ny - (cy - r * 0.52)) < 52 && Math.abs(nx - cx) < r * 0.72) continue;
+      g.fillStyle = rgba(INK, 0.3 + cw * 0.45);
+      g.beginPath(); g.arc(nx, ny, 2.2 + cw * 2.4, 0, TAU); g.fill();
+    }
+    /* the far limb darkens; the old version painted a hard rectangle across the ball for this,
+       which looked like a belt laid on top of a balloon */
+    const limb = g.createRadialGradient(cx, cy, r * 0.55, cx, cy, r);
+    limb.addColorStop(0, 'rgba(0,0,0,0)');
+    limb.addColorStop(1, rgba(col.room0, 0.5));
+    g.fillStyle = limb; g.fillRect(L.x, L.y, L.w, L.h);
     dust(g, L, F, 90);
     G.subject(g, DW * 0.5, DH * 0.46 + 150, 0.72, 'stand', 1, F[8] * 0.5);
     g.restore();
