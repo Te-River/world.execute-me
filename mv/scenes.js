@@ -394,6 +394,7 @@ function givings(g, L) {
 
 function page(g, col, L, o) {
   o = o || {};
+  window.SHEET = L;                                       /* so the cutter can take a macro on it */
   const mcx = L.x + L.w / 2, mcy = L.y + L.h / 2;
   g.save();
   /* The sheet used to be an axis-aligned card pasted onto the frame, near-white and covering two
@@ -667,15 +668,29 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
     on(g, L, (gg, W, H) => {
       gg.strokeStyle = INK; gg.fillStyle = INK; gg.lineWidth = 2.4;
       const cx = W * 0.5, cy = H * 0.5;
-      if (t < 47.67) {                                       /* to AC, to DC */
+      /* Five sub-phases, one per sung line. This used to be an `if (t < X)` chain, so the page
+         changed completely in a single frame at 47.67 / 49.53 / 51.36 / 55.08 - which is exactly
+         what the 120 fps sweep files as an element appearing out of nothing. Each phase now crosses
+         its own boundary, and the outgoing one keeps drawing while it goes. */
+      const X = 0.45;
+      const ph = (from, next) => (t < from || t >= next + X) ? 0
+        : clamp((t - from) / X) * (next === Infinity ? 1 : 1 - clamp((t - next) / X));
+      let a = ph(44.45, 47.67);
+      if (a > 0) {                                           /* to AC, to DC */
+        gg.save(); gg.globalAlpha = a;
         const u = seg(t, 44.45, 47.6);
         gg.lineWidth = 3; G.box(gg, W * 0.06, H * 0.14, W * 0.88, H * 0.72);
         gg.strokeStyle = tint(ACC, '#000000', 0.05); gg.lineWidth = 3;
         G.sine(gg, W * 0.1, cy, W * 0.8, H * 0.3 * (1 - u), 3, t * 3.2);
-        gg.strokeStyle = ACC; gg.lineWidth = 4; gg.globalAlpha = u;
-        G.line(gg, W * 0.1, cy, W * 0.1 + W * 0.8 * u, cy); gg.globalAlpha = 1;
-        gg.fillStyle = INK; G.text(gg, u < 0.5 ? 'AC' : 'DC', W * 0.12, H * 0.24, 30, 'left');
-      } else if (t < 49.53) {                                /* a pair of eyes, closing */
+        gg.strokeStyle = ACC; gg.lineWidth = 4; gg.globalAlpha = u * a;
+        G.line(gg, W * 0.1, cy, W * 0.1 + W * 0.8 * u, cy);
+        gg.globalAlpha = a; gg.fillStyle = INK;
+        G.text(gg, u < 0.5 ? 'AC' : 'DC', W * 0.12, H * 0.24, 30, 'left');
+        gg.restore();
+      }
+      a = ph(47.67, 49.53);
+      if (a > 0) {                                           /* a pair of eyes, closing */
+        gg.save(); gg.globalAlpha = a;
         const u = seg(t, 47.67, 49.5);
         gg.strokeStyle = INK; gg.lineWidth = 3;
         gg.beginPath(); gg.ellipse(cx, cy, W * 0.34, H * 0.28 * (1 - u * 0.92), 0, 0, TAU); gg.stroke();
@@ -684,14 +699,22 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
         gg.strokeStyle = ACC; gg.lineWidth = 5;
         G.line(gg, cx - W * 0.36, cy - H * 0.3 * u, cx + W * 0.36, cy - H * 0.3 * u);
         G.line(gg, cx - W * 0.36, cy + H * 0.3 * u, cx + W * 0.36, cy + H * 0.3 * u);
-      } else if (t < 51.36) {                                /* so dizzy */
+        gg.restore();
+      }
+      a = ph(49.53, 51.36);
+      if (a > 0) {                                           /* so dizzy */
+        gg.save(); gg.globalAlpha = a;
         gg.strokeStyle = INK; gg.lineWidth = 2.4; gg.beginPath();
-        for (let i = 0; i < 300; i++) { const a = i * 0.11 + t * 2.4, r = i * 1.9; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.62; i ? gg.lineTo(x, y) : gg.moveTo(x, y); }
+        for (let i = 0; i < 300; i++) { const an = i * 0.11 + t * 2.4, r = i * 1.9; const x = cx + Math.cos(an) * r, y = cy + Math.sin(an) * r * 0.62; i ? gg.lineTo(x, y) : gg.moveTo(x, y); }
         gg.stroke();
         gg.strokeStyle = rgba(ACC, 0.55); gg.beginPath();
-        for (let i = 0; i < 180; i++) { const a = -i * 0.13 - t * 1.9, r = i * 2.5; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.62; i ? gg.lineTo(x, y) : gg.moveTo(x, y); }
+        for (let i = 0; i < 180; i++) { const an = -i * 0.13 - t * 1.9, r = i * 2.5; const x = cx + Math.cos(an) * r, y = cy + Math.sin(an) * r * 0.62; i ? gg.lineTo(x, y) : gg.moveTo(x, y); }
         gg.stroke();
-      } else if (t < 55.08) {                                /* time, running backwards */
+        gg.restore();
+      }
+      a = ph(51.36, 55.08);
+      if (a > 0) {                                           /* time, running backwards */
+        gg.save(); gg.globalAlpha = a;
         const u = seg(t, 51.36, 55);
         gg.strokeStyle = INK; gg.lineWidth = 2.6; G.line(gg, W * 0.06, cy, W * 0.94, cy);
         for (let i = 0; i <= 16; i++) { const x = W * 0.06 + i * (W * 0.88 / 16); G.line(gg, x, cy - 14, x, cy + 14); }
@@ -701,7 +724,11 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
         gg.strokeStyle = ACC; gg.fillStyle = ACC; gg.lineWidth = 4;
         G.ray(gg, px, cy, -1, 0, 52); G.arrowHead(gg, px - 52, cy, 20, -1, 0); G.disc(gg, px, cy, 7);
         G.text(gg, String(Math.round(2026 + u * 3000)) + ' B.C.', px, cy + 64, 24);
-      } else {                                               /* unite us two */
+        gg.restore();
+      }
+      a = ph(55.08, Infinity);
+      if (a > 0) {                                           /* unite us two */
+        gg.save(); gg.globalAlpha = a;
         const u = oback(seg(t, 55.08, 58.8));
         gg.lineWidth = 3; const d = 190 * (1 - u * 0.55);
         gg.strokeStyle = tint(ACC, '#000000', 0.1); G.circle(gg, cx - d / 2, cy, 130);
@@ -709,6 +736,7 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
         gg.fillStyle = rgba(ACC, 0.14 + u * 0.2); gg.beginPath();
         gg.arc(cx - d / 2, cy, 130, -1.05, 1.05); gg.arc(cx + d / 2, cy, 130, Math.PI - 1.05, Math.PI + 1.05);
         gg.closePath(); gg.fill();
+        gg.restore();
       }
     });
     endPage(g);
@@ -797,7 +825,12 @@ S.push({ id: 'gifts', from: 74.04, to: 88.58,
     ];
     on(g, L, (gg, W, H) => {
       gg.strokeStyle = INK; gg.fillStyle = INK;
-      if (t < 85.07) {                                        /* the table, one case live */
+      /* the table hands over to the witness instead of being replaced by it: this used to be a hard
+         branch at 85.07, and the 120 fps sweep caught the whole page swapping in one frame */
+      const x = clamp((t - 85.07) / 0.55);
+      if (x < 1) {
+        gg.save(); gg.globalAlpha = 1 - x;                      /* the table, one case live */
+        const fade = 1 - x;
         const live = Math.max(0, CASES.filter((c) => t >= c.at).length - 1);
         gg.fillStyle = rgba(INK, 0.55);
         G.text(gg, 'switch (me.form) {', W * 0.05, H * 0.12, 22, 'left');
@@ -810,14 +843,17 @@ S.push({ id: 'gifts', from: 74.04, to: 88.58,
         gg.save(); gg.translate(W * 0.62, H * 0.72); gg.scale(u, u);
         gg.strokeStyle = INK; gg.fillStyle = INK; gg.lineWidth = 3;
         G.specimen(gg, c.kind, 0, 0, 1.45); gg.restore();
-        gg.fillStyle = INK; gg.globalAlpha = clamp(u);
-        G.text(gg, '= ' + c.out, W * 0.62, H * 0.78, 24, 'center'); gg.globalAlpha = 1;
+        gg.fillStyle = INK; gg.globalAlpha = clamp(u) * fade;
+        G.text(gg, '= ' + c.out, W * 0.62, H * 0.78, 24, 'center'); gg.globalAlpha = fade;
         if (c.kind === 'cat' && t > 82.83) {                  /* the purr, as a carrier wave */
           gg.strokeStyle = ACC; gg.lineWidth = 2;
-          for (let i = 0; i < 3; i++) { const p = (t * 0.9 + i / 3) % 1; gg.globalAlpha = 0.45 * (1 - p); G.circle(gg, W * 0.62, H * 0.5, 24 + p * 96); }
-          gg.globalAlpha = 1;
+          for (let i = 0; i < 3; i++) { const p = (t * 0.9 + i / 3) % 1; gg.globalAlpha = 0.45 * (1 - p) * fade; G.circle(gg, W * 0.62, H * 0.5, 24 + p * 96); }
+          gg.globalAlpha = fade;
         }
-      } else {                                                /* the only instance, and its witness */
+        gg.restore();
+      }
+      if (x > 0) {                                            /* the only instance, and its witness */
+        gg.save(); gg.globalAlpha = x;
         const u = oback(seg(t, 85.07, 86.8)), cx = W * 0.3, cy = H * 0.46;
         gg.fillStyle = rgba(INK, 0.5);
         G.text(gg, '// if I am the only god', W * 0.05, H * 0.12, 22, 'left');
@@ -838,6 +874,7 @@ S.push({ id: 'gifts', from: 74.04, to: 88.58,
           gg.strokeStyle = ACC; gg.fillStyle = ACC; gg.lineWidth = 4;
           G.box(gg, -104, -34, 208, 68); G.text(gg, 'PROOF', 0, 0, 34); gg.restore();
         }
+        gg.restore();
       }
     });
     endPage(g);
@@ -918,8 +955,13 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
   draw(g, k, F, t, col) {
     const L = { x: 340, y: 176, w: 620, h: 470 };
     room(g, col, F, t, L, { reach: 1.3 });
-    if (t < 117.27) {
+    const X = 0.5;
+    const ph = (from, next) => (t < from || t >= next + X) ? 0
+      : clamp((t - from) / X) * (next === Infinity ? 1 : 1 - clamp((t - next) / X));
+    let a = ph(110.9, 117.27);
+    if (a > 0) {
       /* six "you have left", and the star loses one arm per word */
+      g.save(); g.globalAlpha = a;
       page(g, col, L);
       on(g, L, (gg, W, H) => {
         const LEFT = [110.90, 112.22, 113.10, 114.18, 114.92, 115.78];
@@ -929,8 +971,12 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
         G.star(gg, W * 0.5, H * 0.44, Math.min(W, H) * 0.36, 6, cut, 110.90, col, t);
       });
       endPage(g);
-    } else if (t < 124.89) {
+      g.restore();
+    }
+    a = ph(117.27, 124.89);
+    if (a > 0) {
       /* ISOLATION: the hub, still lit, with nothing left to send to */
+      g.save(); g.globalAlpha = a;
       page(g, col, L);
       on(g, L, (gg, W, H) => {
         const u = oback(seg(t, 117.27, 118.6));
@@ -941,14 +987,18 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
           gg.fillStyle = INK;
           for (let i = 0; i < 26; i++) {
             const x = ((i * 137) % 560) + 40, y = 60 + ((i * 91) % 340);
-            gg.globalAlpha = Math.max(0, 1 - fr * 1.4);
+            gg.globalAlpha = a * Math.max(0, 1 - fr * 1.4);
             G.fill(gg, [[x + fr * 520, y], [x + fr * 520 + 16, y + 7], [x + fr * 520 + 6, y + 19]]);
           }
-          gg.globalAlpha = 1;
+          gg.globalAlpha = a;
         }
       });
       endPage(g);
-    } else {                                                  /* DISHEARTENED — 无心 */
+      g.restore();
+    }
+    a = ph(124.89, Infinity);
+    if (a > 0) {                                                  /* DISHEARTENED — 无心 */
+      g.save(); g.globalAlpha = a;
       page(g, col, L);
       on(g, L, (gg, W, H) => {
         const u = oback(seg(t, 124.89, 126.4)), cx = W * 0.5, cy = H * 0.48;
@@ -965,10 +1015,11 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
           gg.strokeStyle = INK; gg.lineWidth = 4;
           G.line(gg, cx - 280, cy + 20, cx - 190, cy + 20);
           G.ray(gg, cx - 235, cy + 20, 0, -1, 118); G.arrowHead(gg, cx - 235, cy + 20 - 118, 22, 0, -1);
-          gg.globalAlpha = 1;
+          gg.globalAlpha = a;
         }
       });
       endPage(g);
+      g.restore();
     }
     dust(g, L, F, 60);
   } });

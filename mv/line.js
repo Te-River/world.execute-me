@@ -207,7 +207,10 @@ function display(g, t, W, H, pal, LYRICS, camZ) {
   g.textAlign = a[2]; g.textBaseline = 'middle';
   const tw = g.measureText(h.w).width;
   const left = a[2] === 'left' ? x : a[2] === 'right' ? x - tw : x - tw / 2;
-  g.beginPath(); g.rect(0, 0, left + 12 + tw * u + 4, H); g.clip();
+  /* the wipe has to start *before* the word: this rect used to carry a +12/+4 lead-in, so the
+     first frame of a hook already showed ~16 px of the letter and the 120 fps sweep read that pop
+     as an unexplained flash */
+  g.beginPath(); g.rect(0, 0, left - 8 + (tw + 16) * u, H); g.clip();
   g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
   g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
   g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);
@@ -232,6 +235,26 @@ function noteName(hz) {
 }
 function chrome(g, t, W, H, pal, F) {
   const bt = beatAt(t), hz = pitch(t), flat = F ? F[14] : 0, rms = F ? F[8] : 0;   /* calibrated 0..1 */
+  /* Four of these rows are discrete states rather than live measurements, and a state flip used to
+     land as a one-frame text swap - the sweep caught 'uninitialised' becoming 'null' at 124.89 and
+     read it as an element popping. A readout is allowed to change; it is not allowed to jump, so a
+     row that changes inside the next fifth of a second dips out, changes while invisible, and comes
+     back. The live pitch/texture rows are excluded: they change every frame by design. */
+  const disc = (tt) => [
+    tt < 131.2 ? 'RUNNING' : tt < 147.66 ? 'HALTED' : tt < 169.82 ? 'SENTENCED' : tt < 193 ? 'REWINDING' : 'EXITING',
+    tt < 124.89 ? 'uninitialised' : 'null',
+    tt < 110.9 ? 'present' : 'null',
+    tt < 184.54 ? 'not reached' : 'you',
+  ];
+  const DIP = { 0: 0, 1: 1, 2: 2, 5: 3 };
+  function dip(i) {
+    const k = DIP[i]; if (k === undefined) return 1;
+    const now = disc(t)[k];
+    if (disc(t - 0.24)[k] === now && disc(t + 0.24)[k] === now) return 1;
+    let lo = t - 0.24, hi = t + 0.24;
+    for (let s = 0; s < 8; s++) { const m = (lo + hi) / 2; if (disc(m)[k] === disc(t)[k]) hi = m; else lo = m; }
+    return clamp(Math.abs(t - hi) / 0.12, 0, 1);
+  }
   const rows = [
     ['state', t < 131.2 ? 'RUNNING' : t < 147.66 ? 'HALTED' : t < 169.82 ? 'SENTENCED' : t < 193 ? 'REWINDING' : 'EXITING'],
     ['heart()', t < 124.89 ? 'uninitialised' : 'null'],
@@ -259,9 +282,9 @@ function chrome(g, t, W, H, pal, F) {
   g.font = `${Math.max(11, Math.round(H * 0.0147))}px ui-monospace,Consolas,monospace`;
   g.textBaseline = 'middle';
   rows.forEach((r, i) => {
-    const yy = y0 + i * dy, a = 0.42 + 0.12 * Math.sin((t * 1.6) + i);
-    g.textAlign = 'left'; g.fillStyle = rgba(pal.rim, a * 0.6); g.fillText(r[0], W * 0.775, yy);
-    g.textAlign = 'right'; g.fillStyle = r[1] === 'null' ? rgba(pal.accent, 0.85) : rgba(pal.rim, a);
+    const yy = y0 + i * dy, d = dip(i), a = (0.42 + 0.12 * Math.sin((t * 1.6) + i)) * d;
+    g.textAlign = 'left'; g.fillStyle = rgba(pal.rim, (0.42 + 0.12 * Math.sin((t * 1.6) + i)) * 0.6); g.fillText(r[0], W * 0.775, yy);
+    g.textAlign = 'right'; g.fillStyle = r[1] === 'null' ? rgba(pal.accent, 0.85 * d) : rgba(pal.rim, a);
     g.fillText(r[1], W * 0.972, yy);
     g.strokeStyle = rgba(pal.rim, 0.07); g.lineWidth = 1;
     g.beginPath(); g.moveTo(W * 0.775, yy + dy * 0.5); g.lineTo(W * 0.972, yy + dy * 0.5); g.stroke();

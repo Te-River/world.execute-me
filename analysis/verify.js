@@ -196,8 +196,16 @@ function flickers() {
     if (S.dif[a - 1] > FLICKER.under || S.dif[b + 1] > FLICKER.under) { f = b; continue; }
     const t = a / rate;
     const sc = SCENES.find((s) => t >= s.from && t < s.to);
+    /* A beat-cut is a deliberate edit, not a bug, and the gate has to be able to tell them apart
+       without taking my word for it. Two things must both hold: the spike coincides (within 2
+       frames) with an entry in the published cut list - which is itself derived only from measured
+       beats - AND the camera moved discontinuously at that frame, which is what a cut is. An
+       element popping without the camera moving stays a FLASH. */
+    const bc = (window.CUTS || []).find((c) => Math.abs(c.at - t) < 2 / rate);
+    const camJump = (S.pdx[a] || 0) + (S.pdy[a] || 0) > 40;
     const cause = sc && sc.cut ? 'hard-cut'
-      : SCENES.some((s) => Math.abs(t - s.from) < 1.5) ? 'dissolve' : 'FLASH';
+      : SCENES.some((s) => Math.abs(t - s.from) < 1.5) ? 'dissolve'
+      : (bc && camJump) ? 'beat-cut' : 'FLASH';
     out.push({ f: a, t: +t.toFixed(3), run: b - a + 1, peak: S.dif[a],
                scene: sc ? sc.id : '-', cause: cause });
     f = b + 1;

@@ -183,6 +183,43 @@ if (window.MUSIC) for (let i = 1; i < SCENES.length; i++) {
   const b = MVL.onBar(SCENES[i].from);
   if (b !== SCENES[i].from) { SCENES[i].from = b; SCENES[i - 1].to = b; }
 }
+/* ---------------- the edit ---------------- */
+/* The film had no cutting rhythm: ~20 long takes joined by dissolves, every one of them the same
+   medium shot of a sheet standing in the middle of the room. The recording says otherwise - a 128
+   BPM theatrical number whose bar-to-bar impact swings by more than double between the verses and
+   the chant. So the cut list is derived from the measured onsets: a framing change is only ever
+   allowed on a beat, and how often one is allowed depends on how hard that bar is being hit. Three
+   framings cycle - the shot's own, a macro that fills the frame with the ink, and a pull that
+   shows the room. The macro is the one this film never had. */
+const CUTS = (() => {
+  if (!window.MUSIC) return [];
+  const M = window.MUSIC, root = M.meta.root, out = [];
+  let last = -9, mode = 0;
+  for (let i = 0; i < M.beat.length; i++) {
+    const t = M.beat[i];
+    const sc = SCENES.find((s) => t >= s.from && t < s.to);
+    if (!sc || sc.cut) { last = -9; continue; }          /* the chant edits itself; leave it alone */
+    let w = 0, n = 0;
+    for (let k = i; k < i + 4 && k < M.beat.length; k++) { w += (M.beatOn[k] || 0); n++; }
+    const e = n ? w / n / 255 : 0;
+    if (e < 0.28) continue;
+    const inBar = (((i - root) % 4) + 4) % 4;
+    if (!(inBar === 0 || (inBar === 2 && e > 0.55))) continue;
+    if (t - last < (e > 0.55 ? 1.0 : 2.4)) continue;
+    last = t; mode = mode % 3 + 1;
+    out.push({ at: t, mode });
+  }
+  return out;
+})();
+window.CUTS = CUTS;                                       /* published so the verifier can audit it */
+let cutI = 0;
+function editAt(t) {
+  if (!CUTS.length) return null;
+  while (cutI + 1 < CUTS.length && CUTS[cutI + 1].at <= t) cutI++;
+  while (cutI > 0 && CUTS[cutI].at > t) cutI--;
+  return t >= CUTS[cutI].at ? CUTS[cutI] : null;
+}
+
 function actAt(t) {
   for (let i = 0; i < ACTS.length; i++) if (t >= ACTS[i].from && t < ACTS[i].to) return i;
   return t < ACTS[0].from ? 0 : ACTS.length - 1;
@@ -280,6 +317,15 @@ function cameraAt(t) {
             shake: Math.max(prev.shake || 0, f.shake) };
     }
   }
+  /* The edit overrides the shot's own framing for as long as its segment lasts. A macro is taken
+     on the sheet as it stands in this shot, which is why scenes.js publishes the rect it is using. */
+  const ed = editAt(t);
+  if (ed && ed.mode !== 0) {
+    const S = window.SHEET;
+    if (ed.mode === 1 && S) { f = { z: f.z * 2.35, x: S.x + S.w / 2, y: S.y + S.h * 0.44, shake: f.shake }; }
+    else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake }; }
+    if (t - ed.at < 0.06) f.editHard = true;
+  }
   return f;
 }
 
@@ -294,7 +340,7 @@ let camState = null, camStateT = -1, lastCam = null;
 function cameraFor(t) {
   const f = cameraAt(t);
   const sc = SCENES.find(s => t >= s.from && t < s.to);
-  const hard = !!(sc && sc.cut);
+  const hard = !!(sc && sc.cut) || !!f.editHard;
   const dt = Math.min(0.25, Math.max(0, t - camStateT));
   if (!camState || hard || t < camStateT || t - camStateT > 0.5) camState = { z: f.z, x: f.x, y: f.y };
   else {
