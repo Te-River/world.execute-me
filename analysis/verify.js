@@ -473,6 +473,30 @@ async function framing(step) {
   return rows;
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing };
+/* Element-level crop, upscaled. Whole-frame review quietly exempts anything with low presence -
+   that is how a melody line reduced to scattered ticks survived fifteen rounds of "I looked at every
+   frame". So each round should also look at the background layers on their own, at magnification.
+   Rect is fractional of the frame; scale multiplies the crop's pixels into the output. */
+async function crop(t, name, rx, ry, rw, rh, scale) {
+  const cv = document.getElementById('stage');
+  cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
+  dispatchEvent(new Event('resize'));
+  window.MV.pin(t); window.MV.step(t * 1000);
+  const sx = Math.round(cv.width * rx), sy = Math.round(cv.height * ry);
+  const sw = Math.round(cv.width * rw), sh = Math.round(cv.height * rh);
+  const k = scale || 2;
+  const out = document.createElement('canvas'); out.width = sw * k; out.height = sh * k;
+  const g = out.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(cv, sx, sy, sw, sh, 0, 0, sw * k, sh * k);
+  g.font = '16px ui-monospace,monospace'; g.fillStyle = '#fff';
+  g.fillText('t=' + t.toFixed(2) + '  crop ' + (rx * 100).toFixed(0) + ',' + (ry * 100).toFixed(0) +
+             ' ' + (rw * 100).toFixed(0) + 'x' + (rh * 100).toFixed(0) + '%  x' + k, 8, 20);
+  const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.94));
+  await fetch('/save-' + name, { method: 'POST', body: blob });
+  return { t: t, out: out.width + 'x' + out.height };
+}
+
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing, crop };
 return 'VERIFY ready';
 })();
