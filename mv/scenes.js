@@ -546,7 +546,12 @@ function code(g, L, active, strikeFrom) {
 
 /* 1 — 0..16 s: the lamp wakes, and the object is written down */
 S.push({ id: 'boot', from: 0, to: 16,
-  frame: (k) => k < 0.34 ? { z: 1.5, x: DW * 0.44, y: DH * 0.5 } : { z: 1.0, x: DW * 0.5, y: DH * 0.5 },
+  /* The opening used to start at z 1.5, which made the sheet a wall across half the frame - and
+     because the sung word is deliberately composited behind the page, the film's first words
+     ("Switch on the power line / Remember to put on / PROTECTION") were being drawn underneath the
+     paper and never seen. Pulling the camera back to 1.15 leaves the sheet about a third of the
+     frame, so there is room beside the lamp for the thing being sung. */
+  frame: (k) => k < 0.34 ? { z: 1.15, x: DW * 0.44, y: DH * 0.5 } : { z: 1.0, x: DW * 0.5, y: DH * 0.5 },
   draw(g, k, F, t, col) {
     const w = 620 * (t < 0.9 ? seg(t, 0.05, 0.9) : 1), h = 470 * (t < 1.5 ? seg(t, 0.6, 1.5) : 1);
     const L = { x: DW * 0.44 - w / 2, y: DH * 0.5 - h / 2, w: w, h: h };
