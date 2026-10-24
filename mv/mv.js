@@ -329,7 +329,7 @@ function cameraAt(t) {
      on the sheet as it stands in this shot, which is why scenes.js publishes the rect it is using. */
   const ed = editAt(t);
   if (ed && ed.mode !== 0) {
-    const S = window.SHEET;
+    const S = sheetNow(t);
     if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake }; }
     else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake }; }
     if (t - ed.at < 0.06) f.editHard = true;
@@ -361,9 +361,23 @@ let camState = null, camStateT = -1, lastCam = null;
    where it should sit is an authoring decision per shot, and study's off-centre look was fixed at
    the scene, not here. */
 let boundScene = null, boundT = -1;
-function boundToSheet(cam, t, hard, sc) {
+/* page() publishes the sheet rect as it draws and stamps the time it drew it. Half a second later
+   with no new stamp means the sheet has left the scene, and anything that reads the rect after that
+   is aiming at a ghost. void is the case: the crash report is taken away at 135.55 and no page is
+   drawn for the next twelve seconds, yet the cutter kept macroing onto the old rect and the camera
+   kept bounding itself to it - so the film zoomed into empty floor and pushed the survivor out of
+   frame. The tolerance has to sit above the verifier's own sampling step, or the sweep measures a
+   bound that never fires. */
+const SHEET_STALE = 0.5;
+function sheetNow(t) {
   const S = window.SHEET;
-  if (!S || !S.w || !cam.z) { boundScene = null; return cam; }
+  if (!S || !S.w) return null;
+  if (window.SHEET_T === undefined || Math.abs(t - window.SHEET_T) > SHEET_STALE) return null;
+  return S;
+}
+function boundToSheet(cam, t, hard, sc) {
+  const S = sheetNow(t);
+  if (!S || !cam.z) { boundScene = null; return cam; }
   const cx = S.x + S.w / 2, half = S.w * 0.38;          /* page() turns the sheet to 0.76 wide */
   const halfView = (W / 2) / (fitScale() * cam.z);      /* design px from target to frame edge */
   const reach = Math.max(0, halfView - half * 0.88);

@@ -441,9 +441,11 @@ async function framing(step) {
   for (const sc of window.SCENES) {
     let n = 0, cut = 0, worst = 0, worstAt = 0, worstLate = 0, lateAt = 0, offSum = 0, overWorst = 0, overAt = 0;
     for (let t = sc.from + 0.12; t < sc.to - 0.05; t += step) {
-      window.SHEET_T = -1;
       window.MV.pin(t); window.MV.step(t * 1000);
       const S = window.SHEET, c = window.MV.cam();
+      /* page() stamps the time it drew, so a stamp equal to this t proves the sheet is in this
+         shot. It must not be cleared before the render: the camera asks the same question while
+         deciding whether to bound itself, and a sentinel would switch the thing being measured off. */
       if (!S || Math.abs(window.SHEET_T - t) > 1e-6 || !c || !c.z) continue;
       const scale = Math.min(cv.width / DW, cv.height / DH) * 1.1 * c.z;
       const halfView = (cv.width / 2) / scale;            /* design px from camera x to the frame edge */

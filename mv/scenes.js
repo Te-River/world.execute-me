@@ -1130,14 +1130,23 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
     const prad = 300 - seg(t, 135.55, 147.0) * 185;
     g.save(); g.globalCompositeOperation = 'lighter';
     const pool = g.createRadialGradient(px, py, 0, px, py, prad);
-    pool.addColorStop(0, rgba(RIM, (0.26 + F[8] * 0.12) * drain));
-    pool.addColorStop(0.4, rgba(RIM, 0.09 * drain));
+    /* Reading the stretch back at one frame per two seconds, six of those frames were the same
+       illegible smear: a wide, soft, low-alpha ellipse with a 43-pixel dot in it. A pool of light
+       only reads as a pool when it has a core you could stand in and an edge you could step over,
+       so the falloff is pulled in hard and the middle is given back its weight. */
+    pool.addColorStop(0, rgba(RIM, (0.62 + F[8] * 0.2) * drain));
+    pool.addColorStop(0.3, rgba(RIM, 0.3 * drain));
+    pool.addColorStop(0.68, rgba(RIM, 0.07 * drain));
     pool.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = pool;
     g.translate(px, py); g.scale(1, 0.3); g.translate(-px, -py);
     g.fillRect(px - prad, py - prad, prad * 2, prad * 2);
     g.restore();
-    G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, (0.4 + F[8] * 0.3) * drain);
+    /* the rim of the pool, drawn thin and hard: it is what turns a blur into a place, and it gives
+       the survivor something to be silhouetted against rather than lost inside */
+    g.strokeStyle = rgba(RIM, 0.3 * drain); g.lineWidth = 2;
+    g.beginPath(); g.ellipse(px, py, prad, prad * 0.3, 0, 0, TAU); g.stroke();
+    G.subject(g, DW * 0.56, GY, 1.9, 'kneel', -1, (0.4 + F[8] * 0.3) * drain);
     /* the caret still blinks — nobody is typing — but it breathes rather than switching,
        so a half-second gate cannot read as a one-frame flash */
     g.fillStyle = rgba(RIM, 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(t * 3.1)));
