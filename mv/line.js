@@ -156,7 +156,7 @@ function melody(g, t, W, H, pal, camZ) {
     }
     flush(); g.restore();
   };
-  stroke(false, 0.62, false);                                 /* the sung line: one solid stroke */
+  stroke(false, 0.44, false);                                 /* the sung line: one solid stroke */
   stroke(true, 0.2, true);                                    /* its reflection: dashed, faint */
   g.strokeStyle = rgba(pal.rim, 0.1); g.lineWidth = 1;
   g.beginPath(); g.moveTo(0, rail); g.lineTo(W, rail); g.stroke();

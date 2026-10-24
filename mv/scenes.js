@@ -36,23 +36,40 @@ const tint = (a, b, t) => {
   return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(t))).toString(16).padStart(2, '0')).join('');
 };
 const rgba = (s, a) => { const c = hex(s); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+/* the current stroke colour, with its alpha scaled — so a helper can re-stroke in the caller's ink */
+function fade(st, k) {
+  if (typeof st !== 'string') return st;
+  if (st.charAt(0) === '#') return rgba(st, k);
+  const m = st.match(/[\d.]+/g);
+  if (!m || m.length < 3) return st;
+  return `rgba(${m[0]},${m[1]},${m[2]},${(m.length > 3 ? +m[3] : 1) * k})`;
+}
+/* Ink, not vector. A single uniform stroke reads as a shape on a screen; the same path laid down
+   twice - once wide and faint, as the bleed a nib leaves around its own line - reads as something
+   somebody wrote on paper, which is what the sheet is supposed to be. Every stroked primitive goes
+   through here so the whole film's hand changes at once. */
+function inkStroke(g) {
+  const lw = g.lineWidth, st = g.strokeStyle;
+  if (lw > 0.7) { g.lineWidth = lw * 2.5; g.strokeStyle = fade(st, 0.15); g.stroke(); }
+  g.lineWidth = lw; g.strokeStyle = st; g.stroke();
+}
 
 /* the page's ink, retargeted per act by room() so the film darkens continuously */
 let INK = '#1d2833', ACC = '#b3263a', SIL = '#04070a', RIM = '#cfe0f0', PAGE = '#eef2f6';
 
 const G = {
-  line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); },
-  ray(g, x, y, dx, dy, len) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx * len, y + dy * len); g.stroke(); },
+  line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); inkStroke(g); },
+  ray(g, x, y, dx, dy, len) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx * len, y + dy * len); inkStroke(g); },
   poly(g, pts, close) {
     g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
     if (close !== false) g.closePath();
-    g.stroke();
+    inkStroke(g);
   },
   fill(g, pts, close) { G.poly(g, pts, close === undefined ? true : close); g.fill(); },
-  circle(g, x, y, r) { g.beginPath(); g.arc(x, y, Math.max(0.1, r), 0, TAU); g.stroke(); },
+  circle(g, x, y, r) { g.beginPath(); g.arc(x, y, Math.max(0.1, r), 0, TAU); inkStroke(g); },
   disc(g, x, y, r) { g.beginPath(); g.arc(x, y, Math.max(0.1, r), 0, TAU); g.fill(); },
-  box(g, x, y, w, h) { g.strokeRect(x, y, w, h); },
+  box(g, x, y, w, h) { g.beginPath(); g.rect(x, y, w, h); inkStroke(g); },
   text(g, s, x, y, size, align, weight) {
     g.font = `${weight || 400} ${size}px ui-monospace,Consolas,"Noto Sans Mono",monospace`;
     g.textAlign = align || 'center'; g.textBaseline = 'middle'; g.fillText(s, x, y);
@@ -70,7 +87,7 @@ const G = {
       const px = x0 + u * w, py = y + Math.sin(u * cycles * TAU + phase) * amp;
       i ? g.lineTo(px, py) : g.moveTo(px, py);
     }
-    g.stroke();
+    inkStroke(g);
   },
   /* "if I approach infinity then you can be my LIMITATIONS": a curve running toward a bound it
      never meets. Verse one draws it as the offer, the last chorus draws it as the answer, so
@@ -82,12 +99,12 @@ const G = {
       const y = y0 - rise / (1 + Math.pow((x - x0) / (w * 0.18), 2));
       i ? g.lineTo(x, y) : g.moveTo(x, y);
     }
-    g.stroke();
+    inkStroke(g);
   },
   heart(g, x, y, r, fill) {    g.beginPath(); g.moveTo(x, y + r * 0.85);
     g.bezierCurveTo(x - r * 1.35, y - r * 0.25, x - r * 0.5, y - r * 1.15, x, y - r * 0.35);
     g.bezierCurveTo(x + r * 0.5, y - r * 1.15, x + r * 1.35, y - r * 0.25, x, y + r * 0.85);
-    g.closePath(); if (fill) g.fill(); g.stroke();
+    g.closePath(); if (fill) g.fill(); inkStroke(g);
   },
   /* The subject of a shot. It is not a person: the lyric is spoken by an instance — something
      that was created, filled in with parameters, given a world, and executed by it — so the
@@ -278,11 +295,16 @@ function companion(g, col, F, t, L) {
   });
   if (live <= 0.001) return;
   g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = live;
-  const shaft = g.createLinearGradient(0, head - 60, 0, foot);
-  shaft.addColorStop(0, rgba(col.page, 0.05));
-  shaft.addColorStop(0.5, rgba(col.rim, 0.15 + F[8] * 0.07));
-  shaft.addColorStop(1, rgba(col.rim, 0.03));
-  g.fillStyle = shaft; g.fillRect(x - 66, head - 60, 132, foot - head + 60);
+  /* a column of light has no edges to draw: filling a rect left a translucent bar leaning against
+     the paper, which is the one thing light is never allowed to look like */
+  const midY = (head + foot) / 2, halfH = (foot - head) / 2 + 90;
+  g.save(); g.translate(x, midY); g.scale(0.3, 1);
+  const shaft = g.createRadialGradient(0, 0, 0, 0, 0, halfH);
+  shaft.addColorStop(0, rgba(col.page, 0.14 + F[8] * 0.06));
+  shaft.addColorStop(0.5, rgba(col.rim, 0.09 + F[8] * 0.05));
+  shaft.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = shaft; g.beginPath(); g.arc(0, 0, halfH, 0, TAU); g.fill();
+  g.restore();
   const b = g.createRadialGradient(x - 8, head - 10, 1, x, head, 31);
   b.addColorStop(0, rgba(col.page, 0.98)); b.addColorStop(0.5, rgba(col.rim, 0.45));
   b.addColorStop(1, 'rgba(0,0,0,0)');
