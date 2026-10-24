@@ -476,7 +476,14 @@ async function framing(step) {
 /* Element-level crop, upscaled. Whole-frame review quietly exempts anything with low presence -
    that is how a melody line reduced to scattered ticks survived fifteen rounds of "I looked at every
    frame". So each round should also look at the background layers on their own, at magnification.
-   Rect is fractional of the frame; scale multiplies the crop's pixels into the output. */
+   Rect is fractional of the frame; scale multiplies the crop's pixels into the output.
+
+   Two traps, both met during the first session of use, and both cost real time if unrecorded:
+   - Lossy output invents structure. A banding pattern was reported on a dark gradient and it turned
+     out to be the .jpg, not the render: the same rect as .png is smooth. Hence the .png option below.
+   - Magnification invents structure too. At 4x a 1px ink-bleed fringe reads as a mis-registration
+     and a quantised rest reads as a line disappearing. Any finding from a crop has to be looked at
+     again at 1x before it is called a defect - the crop's job is to shortlist, not to convict. */
 async function crop(t, name, rx, ry, rw, rh, scale) {
   const cv = document.getElementById('stage');
   cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
@@ -492,7 +499,11 @@ async function crop(t, name, rx, ry, rw, rh, scale) {
   g.font = '16px ui-monospace,monospace'; g.fillStyle = '#fff';
   g.fillText('t=' + t.toFixed(2) + '  crop ' + (rx * 100).toFixed(0) + ',' + (ry * 100).toFixed(0) +
              ' ' + (rw * 100).toFixed(0) + 'x' + (rh * 100).toFixed(0) + '%  x' + k, 8, 20);
-  const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.94));
+  /* PNG when asked for, JPEG otherwise. Magnifying a smooth gradient is exactly where lossy
+     compression invents structure, so a banding pattern seen in a .jpg crop is not evidence until
+     it has been reproduced losslessly - otherwise I end up "fixing" my own screenshot tool. */
+  const wantPng = /\.png$/i.test(name);
+  const blob = await new Promise((r) => out.toBlob(r, wantPng ? 'image/png' : 'image/jpeg', 0.94));
   await fetch('/save-' + name, { method: 'POST', body: blob });
   return { t: t, out: out.width + 'x' + out.height };
 }
