@@ -301,7 +301,7 @@ function room(g, col, F, t, L, o) {
   const warm = col.glow;
   g.save(); g.globalCompositeOperation = 'lighter';
   const beam = g.createRadialGradient(cx, cy, Math.min(L.w, L.h) * 0.14, cx, cy, reach);
-  const power = 0.1 + col.lum * 0.16 + F[8] * 0.07;
+  const power = 0.17 + col.lum * 0.24 + F[8] * 0.09;
   beam.addColorStop(0, rgba(warm, power));
   beam.addColorStop(0.42, rgba(warm, power * 0.28));
   beam.addColorStop(1, 'rgba(0,0,0,0)');
@@ -313,13 +313,13 @@ function room(g, col, F, t, L, o) {
      standing in that room rather than a card in front of a backdrop. */
   const base = Math.min(DH - 6, L.y + L.h);
   g.save(); g.globalCompositeOperation = 'lighter';
-  const pool = g.createRadialGradient(cx, base, 0, cx, base, L.w * 1.1);
-  pool.addColorStop(0, rgba(warm, 0.16 + col.lum * 0.12));
-  pool.addColorStop(0.45, rgba(warm, 0.05));
+  const pool = g.createRadialGradient(cx, base, 0, cx, base, L.w * 1.25);
+  pool.addColorStop(0, rgba(warm, 0.4 + col.lum * 0.22));
+  pool.addColorStop(0.45, rgba(warm, 0.13));
   pool.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = pool;
   g.save(); g.translate(cx, base); g.scale(1, 0.26); g.translate(-cx, -base);
-  g.fillRect(cx - L.w * 1.1, base - L.w * 1.1, L.w * 2.2, L.w * 2.2); g.restore();
+  g.fillRect(cx - L.w * 1.25, base - L.w * 1.25, L.w * 2.5, L.w * 2.5); g.restore();
   g.restore();
   g.save();
   const sh = g.createRadialGradient(cx, base, 0, cx, base, L.w * 0.62);
@@ -389,16 +389,26 @@ function page(g, col, L, o) {
   g.scale(0.76, 0.84); g.translate(-mcx, -mcy);
   /* the cast bloom: a blurred copy of the sheet lying behind it */
   g.save(); g.filter = `blur(${o.blur === undefined ? 26 : o.blur}px)`;
-  g.fillStyle = rgba(col.page, 0.15 + col.lum * 0.11);
-  g.fillRect(L.x - L.w * 0.03, L.y - L.h * 0.03, L.w * 1.06, L.h * 1.06);
+  g.fillStyle = rgba(col.page, 0.34 + col.lum * 0.2);
+  g.fillRect(L.x - L.w * 0.09, L.y - L.h * 0.09, L.w * 1.18, L.h * 1.18);
   g.restore();
   const pg = g.createLinearGradient(L.x, L.y, L.x + L.w * 0.78, L.y + L.h);
-  /* the sheet used to be pulled 35% toward white at the top, which washed the section's hue out
-     — the contact sheet showed six "different" plates reading as one pale wash */
-  pg.addColorStop(0, tint(col.page, '#ffffff', 0.2));
-  pg.addColorStop(0.34, tint(col.page, col.glow, 0.26));
-  pg.addColorStop(1, tint(col.page, col.room0, 0.74));
+  /* The sheet has to be an EMITTER, not a lit card. Every earlier pass over-corrected toward
+     "don't blow it out" and ended with grey MDF in a dark room — which silently cancelled the one
+     premise the whole film rests on. The near corner is allowed to clip; the ink then reads as
+     silhouette against a light source rather than as drawing on a whiteboard. */
+  pg.addColorStop(0, tint(col.page, '#ffffff', 0.66));
+  pg.addColorStop(0.22, tint(col.page, '#ffffff', 0.3));
+  pg.addColorStop(0.55, tint(col.page, col.glow, 0.24));
+  pg.addColorStop(1, tint(col.page, col.room0, 0.52));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const hot = g.createRadialGradient(L.x + L.w * 0.2, L.y + L.h * 0.18, 0,
+                                     L.x + L.w * 0.2, L.y + L.h * 0.18, L.w * 0.85);
+  hot.addColorStop(0, rgba(col.page, 0.3 + col.lum * 0.18));
+  hot.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hot; g.fillRect(L.x, L.y, L.w, L.h);
+  g.restore();
   /* the sheet is ruled. Since the board got smaller, shots whose diagram is two letters and a
      line showed the paper as a blank grey card; a faint rule says "this is a page" without
      adding anything that competes with the ink drawn on it */
