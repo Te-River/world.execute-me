@@ -508,6 +508,78 @@ async function crop(t, name, rx, ry, rw, rh, scale) {
   return { t: t, out: out.width + 'x' + out.height };
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing, crop };
+/* How much of the frame is doing nothing. The user's crop was not a dead *second* - at that moment
+   a sheet and a sung word were both on screen somewhere - it was a dead *region*: a stretch of hall
+   containing nothing but a fragment of the melody contour, the rail and gradient. A per-frame
+   "is anything present" metric cannot see that, and the first version of this check was also
+   structurally dead (the karaoke predicate is true on 82% of samples and the rail on 54%, so "all
+   layers off" could essentially never fire - a gate that cannot fail is a false all-clear).
+
+   So: divide the frame into cells, measure local edge energy, and report the cells that are both
+   empty of structure and outside the sheet. That is the question the crop actually asked. */
+async function deadzone(step) {
+  step = step || 2.0;
+  const cv = document.getElementById('stage');
+  cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
+  dispatchEvent(new Event('resize'));
+  const sc = document.createElement('canvas'); sc.width = 480; sc.height = 270;
+  const sg = sc.getContext('2d', { willReadFrequently: true });
+  const GX = 8, GY = 5, CW = 480 / GX, CH = 270 / GY;
+  /* provisional; readjust against rows.calibration, which is returned with the result */
+  const THRESH = 0.6;
+  const DUR = window.SCORE.meta.duration, rows = [], all = [];
+  for (let t = 0; t < DUR; t += step) {
+    window.MV.pin(t); window.MV.step(t * 1000);
+    sg.drawImage(cv, 0, 0, 480, 270);
+    const d = sg.getImageData(0, 0, 480, 270).data;
+    const lum = new Float32Array(480 * 270);
+    for (let p = 0, i = 0; p < d.length; p += 4, i++) {
+      lum[i] = 0.2126 * d[p] + 0.7152 * d[p + 1] + 0.0722 * d[p + 2];
+    }
+    /* Blur before measuring. The film carries grain on every frame, and grain is exactly the
+       high-frequency energy this check is trying to detect as "structure" - measuring raw gradient
+       magnitude made every cell look alive and capped the whole film at 5% dead, which is not a
+       clean bill of health but a metric that cannot see its own subject. A 3x3 box blur kills the
+       1-pixel noise and keeps lines, letterforms and the edge of the sheet. */
+    const bl = new Float32Array(480 * 270);
+    for (let y = 1; y < 269; y++) for (let x = 1; x < 479; x++) {
+      const i = y * 480 + x;
+      bl[i] = (lum[i - 481] + lum[i - 480] + lum[i - 479] + lum[i - 1] + lum[i] +
+               lum[i + 1] + lum[i + 479] + lum[i + 480] + lum[i + 481]) / 9;
+    }
+    const sheet = (window.SHEET && Math.abs(window.SHEET_T - t) < 0.05) ? [
+      window.SHEET.x / 1600, window.SHEET.y / 900,
+      (window.SHEET.x + window.SHEET.w) / 1600, (window.SHEET.y + window.SHEET.h) / 900
+    ] : null;
+    let dead = 0, worst = [];
+    for (let gy = 0; gy < GY; gy++) for (let gx = 0; gx < GX; gx++) {
+      let e = 0, n = 0;
+      for (let y = gy * CH + 3; y < (gy + 1) * CH - 3; y++) {
+        for (let x = gx * CW + 3; x < (gx + 1) * CW - 3; x++) {
+          const i = (y | 0) * 480 + (x | 0);
+          e += Math.abs(bl[i] - bl[i + 2]) + Math.abs(bl[i] - bl[i + 960]); n++;
+        }
+      }
+      const energy = e / n;
+      all.push(energy);
+      const u0 = gx / GX, v0 = gy / GY, u1 = (gx + 1) / GX, v1 = (gy + 1) / GY;
+      const inSheet = sheet && u1 > sheet[0] && u0 < sheet[2] && v1 > sheet[1] && v0 < sheet[3];
+      if (energy < THRESH && !inSheet) { dead++; worst.push(gx + ',' + gy + ':' + energy.toFixed(2)); }
+    }
+    const scn = window.SCENES.find((s) => t >= s.from && t < s.to);
+    rows.push({ t: +t.toFixed(1), scene: scn ? scn.id : null, deadPct: Math.round(dead / (GX * GY) * 100), cells: worst.slice(0, 4) });
+  }
+  window.MV.unpin();
+  /* the calibration, printed alongside the verdict: a threshold picked without seeing the
+     distribution is a guess, and the last version of this check proved that guessing badly */
+  all.sort((a, b) => a - b);
+  const q = (p) => +all[Math.floor(all.length * p)].toFixed(2);
+  rows.calibration = { n: all.length, p05: q(0.05), p10: q(0.10), p25: q(0.25),
+                       median: q(0.5), p90: q(0.9), threshold: THRESH };
+  rows.sort((a, b) => b.deadPct - a.deadPct);
+  return rows;
+}
+
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing, crop, deadzone };
 return 'VERIFY ready';
 })();
