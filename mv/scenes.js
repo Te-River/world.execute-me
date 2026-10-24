@@ -828,7 +828,7 @@ S.push({ id: 'current', from: 44.45, to: 59.22,
 function trapFrame(cageAt, from, yDrift) {
   return (k, t) => {
     const p = clamp((t - (from + 0.5)) / Math.max(0.5, cageAt - 1.0 - from));
-    return { z: 1.02 - k * 0.07, arc: TRAP_TRAVEL,
+    return { z: lerp(1.15, 0.95, p), arc: lerp(1, TRAP_TRAVEL, clamp((t - (cageAt - 3)) / 3)),
              x: lerp(DW * 0.30, DW * 0.55, p), y: DH * (0.46 + k * yDrift) };
   };
 }
@@ -836,12 +836,20 @@ function trapFrame(cageAt, from, yDrift) {
    sheet at 0.76 of L, so the paper occupies design x 227..713; the trap, and the heart the bars turn
    out to be the outline of, occupy 1088..1472. At z 0.95 the frame reaches ~705 design px either
    side of the target, so a camera that keeps both subjects whole has to stand in x 767..932 - a
-   165 px window, against a phrase travel of 248. That is why this shot asks for two fifths of it
-   instead of the whole of it, and lands on x 880 rather than mid-way between the two:
-   left at full travel, 360 fps sampling showed the descending phrase pulling the camera back to
-   x 584 at 71.2 s, exactly as the cage arrived, and the heart at 190.6 s sitting with three quarters
-   of its outline past the right edge. Both trap windows happen to fall in an odd-numbered phrase,
-   so the travel only ever pulls the same way here, and x stays in 781..880 across the whole hold. */
+   165 px window, against a phrase travel of 248. Left at full travel, 360 fps sampling showed the
+   descending phrase pulling the camera back to x 584 at 71.2 s, exactly as the cage arrived, and the
+   heart at 190.6 s sitting with three quarters of its outline past the right edge. Both trap windows
+   happen to fall in an odd-numbered phrase, so the travel only ever pulls the same way here.
+   The restriction is therefore only in force from three seconds before the bars land, and it ramps
+   in rather than switching, or the shot would cut itself by 149 design px in one frame. Before that
+   the right half of the room holds nothing at all, and the shot may move as far as it likes - which
+   it now does: it opens tight on the page at z 1.15 and pulls back to 0.95 as it travels right, so
+   the space the trap is about to fill is revealed by the move that ends with it filling. Measured
+   before this, the shot spent its whole fifteen seconds at z 1.02 -> 0.95 and x 480 -> 880 with the
+   travel scaled down from the first frame, and the 360 fps sweep named the result: mean motion 0.0,
+   motion peak 9, camera peak 7, against 65-98 and 399-510 for every other act in the film. The first
+   chorus is the song's biggest entrance to that point and it had become the stillest shot in the
+   picture. */
 const TRAP_TRAVEL = 0.40;
 const CAGE_W = DW * 0.24;
 /* u 0 is the bars entirely above the room, u 1 is them standing in it. It used to be the other
