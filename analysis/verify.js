@@ -453,10 +453,10 @@ async function framing(step) {
       /* The camera is allowed to let an eighth of the sheet bleed past the frame - that is what an
          extreme close-up looks like - so "outside" alone is not a fault. What is a fault is sitting
          outside the window the bound was told to enforce, which is what `over` measures. */
-      const over = Math.max(0, off - Math.min(Math.max(0, halfView - half * 0.88), halfView * 0.16)) / half;
+      const over = Math.max(0, off - Math.max(0, halfView - half * 0.88)) / half;
       n++; offSum += over;
       if (out > 0) { cut++; if (out / half > worst) { worst = out / half; worstAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, reach: +(halfView - half).toFixed(0) }; } }
-      if (over > overWorst) { overWorst = over; overAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, off: +off.toFixed(0), reach: +Math.min(Math.max(0, halfView - half * 0.88), halfView * 0.16).toFixed(0) }; }
+      if (over > overWorst) { overWorst = over; overAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, off: +off.toFixed(0), reach: +Math.max(0, halfView - half * 0.88).toFixed(0) }; }
       /* the first two thirds of a second belongs to the camera easing onto the new subject, which
          is a move, not a mistake; a shot still cut after that is framed wrong while it stands still */
       if (t > sc.from + 0.7 && out / half > worstLate) { worstLate = out / half; lateAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, reach: +(halfView - half).toFixed(0) }; }

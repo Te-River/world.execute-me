@@ -1235,8 +1235,12 @@ S.push({ id: 'back', from: 169.82, to: 177.24,
 
 /* 11a — 177.24..184.54 s: it has studied the word */
 S.push({ id: 'study', from: 177.24, to: 184.54,
-  frame: (k, t) => t < 179.92 ? { z: 1.5, x: DW * 0.3, y: DH * 0.4 }
-    : t < 180.85 ? { z: 1.4, x: DW * 0.52, y: DH * 0.42 } : { z: 1.08, x: DW * 0.5, y: DH * 0.48 },
+  /* The sheet is at 300..1000, so its centre is 650 and the camera is authored onto that centre.
+     It used to aim at DW*0.5, which is 150 px right of the subject; with the phrase's own travel
+     on top, the page ended up whole but parked in the left 40% of the frame with a hall beside it.
+     The bound stops the amputation; only the shot can say where it wants its subject. */
+  frame: (k, t) => t < 179.92 ? { z: 1.5, x: 650, y: DH * 0.456 }
+    : t < 180.85 ? { z: 1.4, x: 650, y: DH * 0.456 } : { z: 1.08, x: 650, y: DH * 0.456 },
   draw(g, k, F, t, col) {
     const L = { x: 300, y: 168, w: 700, h: 486 };
     room(g, col, F, t, L);

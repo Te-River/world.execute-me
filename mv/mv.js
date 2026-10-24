@@ -347,23 +347,26 @@ const SLEW = 0.2;
 let camState = null, camStateT = -1, lastCam = null;
 /* A shot may fill the frame with the page; it may not amputate it. Scenes author a camera target
    and a sheet rect independently, and where the two disagree the page walks out of one edge while
-   the other half of the frame fills with empty hall. Measured across the film at 0.25 s, 18 shots
-   lost part of the sheet and study, left, give and current lost more than half of it - "LOVE"
-   rendered as "OVE", "// you can be my limitations" as "he my limitations". So the camera may look
-   past the sheet by an eighth of its half-width, and it gets there by a slew, never a jump. */
+   the other half of the frame fills with empty hall. Measured across the film at 0.25 s, all 16
+   shots that carry a sheet lost part of it in the steady state - left 113% of its half-width
+   outside, current 104%, geometry 89%, free 81% - which is what makes "LOVE" render as "OVE" and
+   "// you can be my limitations" as "he my limitations". So the camera may look past the sheet by
+   an eighth of its half-width, and it gets there by a slew, never a jump.
+
+   What this deliberately does not do is police *composition*. A second term that also kept the
+   sheet near the middle of the picture cut the standing amputation further, 12% -> 5%, and it was
+   wrong: chorus1's sheet sits at x 470 while its cage and its subject sit past 1280, so its
+   off-centre camera is a two-shot, and pinning it to the page froze that shot's framing for
+   fifteen seconds. Where a subject is in the frame is a correctness rule a camera can enforce;
+   where it should sit is an authoring decision per shot, and study's off-centre look was fixed at
+   the scene, not here. */
 let boundScene = null, boundT = -1;
 function boundToSheet(cam, t, hard, sc) {
   const S = window.SHEET;
   if (!S || !S.w || !cam.z) { boundScene = null; return cam; }
   const cx = S.x + S.w / 2, half = S.w * 0.38;          /* page() turns the sheet to 0.76 wide */
   const halfView = (W / 2) / (fitScale() * cam.z);      /* design px from target to frame edge */
-  const bleed = Math.max(0, halfView - half * 0.88);
-  /* Keeping the sheet on screen is not the same as framing it. At 182 s the whole page was inside
-     the frame and still sat in the left 40% of it, because the shot's authored target and the
-     phrase's travel both pull right and nothing stopped them: the limit only ever asked how much
-     of the subject could hang over one edge. The second term asks the other question - how far off
-     the middle of the picture the subject is allowed to be. */
-  const reach = Math.min(bleed, halfView * 0.16);
+  const reach = Math.max(0, halfView - half * 0.88);
   const x = cx + Math.max(-reach, Math.min(reach, cam.x - cx));
   /* Inside one shot the page may slide and the lens may close on it, and the camera has to already
      be there: easing the correction let the frame run ahead of it and left the subject outside -
