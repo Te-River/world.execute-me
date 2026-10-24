@@ -289,13 +289,21 @@ function chrome(g, t, W, H, pal, F) {
   g.save();
   g.globalAlpha = vis;
   const y0 = H * 0.155, dy = H * 0.041;
-  /* the panel sits on a scrim: the sheet is the brightest thing in the room and light-on-light
-     text over it is unreadable, so the rail carries its own shadow */
-  const sx = W * 0.72;
-  const scrim = g.createLinearGradient(sx, 0, W, 0);
-  scrim.addColorStop(0, 'rgba(0,0,0,0)'); scrim.addColorStop(0.35, rgba(pal.room0, 0.82));
-  scrim.addColorStop(1, rgba(pal.room0, 0.94));
-  g.fillStyle = scrim; g.fillRect(sx, y0 - dy, W - sx, rows.length * dy + dy * 1.6);
+  /* The panel sits on a scrim: the sheet is the brightest thing in the room and light-on-light text
+     over it is unreadable. It used to be a rectangle with a gradient on one side only, so its top and
+     bottom edges were straight lines - at 211 s, over a room that has almost nothing left in it, that
+     read as a grey card floating on black, which is the same hard-edged-slab fault just fixed behind
+     the chant's numbers. The falloff is now elliptical and reaches zero on every side, so what is left
+     is a patch of shade with no boundary rather than a panel with four. */
+  const px = W * 0.872, py = y0 + (rows.length - 0.5) * dy * 0.5 + dy * 0.2;
+  const pr = W * 0.20, sy = ((rows.length * dy + dy * 1.6) * 0.62) / pr;
+  g.save();
+  g.translate(px, py); g.scale(1, sy);
+  const scrim = g.createRadialGradient(0, 0, 0, 0, 0, pr);
+  scrim.addColorStop(0, rgba(pal.room0, 0.88)); scrim.addColorStop(0.55, rgba(pal.room0, 0.62));
+  scrim.addColorStop(1, rgba(pal.room0, 0));
+  g.fillStyle = scrim; g.fillRect(-pr, -pr, pr * 2, pr * 2);
+  g.restore();
   g.font = `${Math.max(11, Math.round(H * 0.0147))}px ui-monospace,Consolas,monospace`;
   g.textBaseline = 'middle';
   rows.forEach((r, i) => {
