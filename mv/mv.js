@@ -345,6 +345,35 @@ function cameraAt(t) {
    framing, so the move reads as a move. */
 const SLEW = 0.2;
 let camState = null, camStateT = -1, lastCam = null;
+/* A shot may fill the frame with the page; it may not amputate it. Scenes author a camera target
+   and a sheet rect independently, and where the two disagree the page walks out of one edge while
+   the other half of the frame fills with empty hall. Measured across the film at 0.25 s, 18 shots
+   lost part of the sheet and study, left, give and current lost more than half of it - "LOVE"
+   rendered as "OVE", "// you can be my limitations" as "he my limitations". So the camera may look
+   past the sheet by an eighth of its half-width, and it gets there by a slew, never a jump. */
+let boundScene = null, boundT = -1;
+function boundToSheet(cam, t, hard, sc) {
+  const S = window.SHEET;
+  if (!S || !S.w || !cam.z) { boundScene = null; return cam; }
+  const cx = S.x + S.w / 2, half = S.w * 0.38;          /* page() turns the sheet to 0.76 wide */
+  const halfView = (W / 2) / (fitScale() * cam.z);      /* design px from target to frame edge */
+  const bleed = Math.max(0, halfView - half * 0.88);
+  /* Keeping the sheet on screen is not the same as framing it. At 182 s the whole page was inside
+     the frame and still sat in the left 40% of it, because the shot's authored target and the
+     phrase's travel both pull right and nothing stopped them: the limit only ever asked how much
+     of the subject could hang over one edge. The second term asks the other question - how far off
+     the middle of the picture the subject is allowed to be. */
+  const reach = Math.min(bleed, halfView * 0.16);
+  const x = cx + Math.max(-reach, Math.min(reach, cam.x - cx));
+  /* Inside one shot the page may slide and the lens may close on it, and the camera has to already
+     be there: easing the correction let the frame run ahead of it and left the subject outside -
+     measured at 104% of the sheet's half-width for half a bar. Only the hand-over between two shots
+     moves the subject by teleport, and that is the one thing worth crossing gently. */
+  const dt = Math.min(0.25, Math.max(1 / 240, t - boundT));
+  cam.x = (boundScene === sc || hard || t < boundT) ? x : x + (cam.x - x) * Math.exp(-dt / SLEW);
+  boundT = t; boundScene = sc;
+  return cam;
+}
 function cameraFor(t) {
   const f = cameraAt(t);
   const sc = SCENES.find(s => t >= s.from && t < s.to);
@@ -374,6 +403,7 @@ function cameraFor(t) {
   lastCam = { z: camState.z * (1 + 0.2 * arc), x: camState.x + drift + arc * DW * 0.1 * dir,
               y: camState.y - arc * DH * 0.035, shake: f.shake,
               roll: arc * 0.022 * dir };
+  boundToSheet(lastCam, t, hard, sc);
   /* The closer the camera, the fewer the layers. A 360 fps strip of the macro showed why: blown up,
      the ledger's grey boxes, the telemetry column and the dust all sit at the same visual weight as
      the diagram, so the close-up had no thing to look at and a dead band of room down its right
@@ -639,7 +669,12 @@ function render(ts) {
     renderScene(bx, idx, t, cam);
     fx.setTransform(1, 0, 0, 1, 0, 0);
     fx.clearRect(0, 0, W, HH);
+    /* The incoming shot is only a ghost here, so it must not take the sheet rect with it: page()
+       publishes the rect the cutter macros on and the camera bounds itself against, and while the
+       outgoing shot still carries most of the frame that rect has to stay the one it is drawn from. */
+    const sh = window.SHEET, shT = window.SHEET_T;
     renderScene(fx, idx + 1, t, cam);
+    window.SHEET = sh; window.SHEET_T = shT;
     bx.setTransform(1, 0, 0, 1, 0, 0);
     bx.globalAlpha = a; bx.drawImage(fade, 0, 0); bx.globalAlpha = 1;
   } else {

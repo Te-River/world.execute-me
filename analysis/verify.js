@@ -426,6 +426,51 @@ async function strip(t0, n, name, rate, cols) {
   return { t0: t0, n: n, ms: (n / rate * 1000).toFixed(1), sheet: out.width + 'x' + out.height };
 }
 
-window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip };
+/* Is the subject actually in the picture? Reading the study shot back as frames showed the sheet
+   pinned against the left edge with its first word cut off - the scene authors a camera target and
+   a sheet rectangle separately, and when they disagree the page walks out of frame. This measures
+   the disagreement for every scene, in design pixels, using the same projection the renderer uses.
+   DW/DH mirror the constants at the top of mv/scenes.js. */
+async function framing(step) {
+  step = step || 0.25;
+  const DW = 1600, DH = 900;
+  const cv = document.getElementById('stage');
+  cv.style.cssText = 'position:fixed;left:0;top:0;width:1920px;height:1080px';
+  dispatchEvent(new Event('resize'));
+  const rows = [];
+  for (const sc of window.SCENES) {
+    let n = 0, cut = 0, worst = 0, worstAt = 0, worstLate = 0, lateAt = 0, offSum = 0, overWorst = 0, overAt = 0;
+    for (let t = sc.from + 0.12; t < sc.to - 0.05; t += step) {
+      window.SHEET_T = -1;
+      window.MV.pin(t); window.MV.step(t * 1000);
+      const S = window.SHEET, c = window.MV.cam();
+      if (!S || Math.abs(window.SHEET_T - t) > 1e-6 || !c || !c.z) continue;
+      const scale = Math.min(cv.width / DW, cv.height / DH) * 1.1 * c.z;
+      const halfView = (cv.width / 2) / scale;            /* design px from camera x to the frame edge */
+      const half = S.w * 0.38;                            /* page() turns the sheet to 0.76 wide */
+      const off = Math.abs(c.x - (S.x + S.w / 2));
+      const out = off + half - halfView;
+      /* The camera is allowed to let an eighth of the sheet bleed past the frame - that is what an
+         extreme close-up looks like - so "outside" alone is not a fault. What is a fault is sitting
+         outside the window the bound was told to enforce, which is what `over` measures. */
+      const over = Math.max(0, off - Math.min(Math.max(0, halfView - half * 0.88), halfView * 0.16)) / half;
+      n++; offSum += over;
+      if (out > 0) { cut++; if (out / half > worst) { worst = out / half; worstAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, reach: +(halfView - half).toFixed(0) }; } }
+      if (over > overWorst) { overWorst = over; overAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, off: +off.toFixed(0), reach: +Math.min(Math.max(0, halfView - half * 0.88), halfView * 0.16).toFixed(0) }; }
+      /* the first two thirds of a second belongs to the camera easing onto the new subject, which
+         is a move, not a mistake; a shot still cut after that is framed wrong while it stands still */
+      if (t > sc.from + 0.7 && out / half > worstLate) { worstLate = out / half; lateAt = { t: +t.toFixed(2), z: +c.z.toFixed(2), sw: S.w, reach: +(halfView - half).toFixed(0) }; }
+    }
+    if (n) rows.push({ id: sc.id, from: +sc.from.toFixed(1), n: n,
+      cutPct: +(cut / n * 100).toFixed(0), worstCutPct: +(worst * 100).toFixed(0), worstAt: worstAt,
+      lateCutPct: +(worstLate * 100).toFixed(0), lateAt: lateAt,
+      overPct: +(offSum / n * 100).toFixed(0), worstOverPct: +(overWorst * 100).toFixed(0), overAt: overAt });
+  }
+  window.MV.unpin();
+  rows.sort((a, b) => b.worstOverPct - a.worstOverPct || b.lateCutPct - a.lateCutPct);
+  return rows;
+}
+
+window.VERIFY = { start, status, stats, report, timbre, flickers, shot, smoke, burst, strip, framing };
 return 'VERIFY ready';
 })();

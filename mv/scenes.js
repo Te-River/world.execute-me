@@ -419,6 +419,7 @@ function givings(g, L) {
 function page(g, col, L, o) {
   o = o || {};
   window.SHEET = L;                                       /* so the cutter can take a macro on it */
+  window.SHEET_T = TT;                                    /* stamps it, so a stale rect is never read */
   const mcx = L.x + L.w / 2, mcy = L.y + L.h / 2;
   g.save();
   /* The sheet used to be an axis-aligned card pasted onto the frame, near-white and covering two
@@ -444,15 +445,15 @@ function page(g, col, L, o) {
      "don't blow it out" and ended with grey MDF in a dark room — which silently cancelled the one
      premise the whole film rests on. The near corner is allowed to clip; the ink then reads as
      silhouette against a light source rather than as drawing on a whiteboard. */
-  pg.addColorStop(0, tint(col.page, '#ffffff', 0.66));
-  pg.addColorStop(0.22, tint(col.page, '#ffffff', 0.3));
-  pg.addColorStop(0.55, tint(col.page, col.glow, 0.24));
-  pg.addColorStop(1, tint(col.page, col.room0, 0.52));
+  pg.addColorStop(0, tint(col.page, '#ffffff', 0.62));
+  pg.addColorStop(0.14, tint(col.page, '#ffffff', 0.22));
+  pg.addColorStop(0.42, tint(col.page, col.glow, 0.34));
+  pg.addColorStop(1, tint(col.page, col.room0, 0.5));
   g.fillStyle = pg; g.fillRect(L.x, L.y, L.w, L.h);
   g.save(); g.globalCompositeOperation = 'lighter';
   const hot = g.createRadialGradient(L.x + L.w * 0.2, L.y + L.h * 0.18, 0,
                                      L.x + L.w * 0.2, L.y + L.h * 0.18, L.w * 0.85);
-  hot.addColorStop(0, rgba(col.page, 0.3 + col.lum * 0.18));
+  hot.addColorStop(0, rgba(col.page, 0.18 + col.lum * 0.12));
   hot.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = hot; g.fillRect(L.x, L.y, L.w, L.h);
   g.restore();
@@ -1242,15 +1243,37 @@ S.push({ id: 'study', from: 177.24, to: 184.54,
     page(g, col, L);
     on(g, L, (gg, W, H) => {
       gg.lineWidth = 3; gg.strokeStyle = INK; gg.fillStyle = INK;
-      const u = seg(t, 177.9, 180.6);
-      G.sine(gg, W * 0.08, H * 0.42, W * 0.34, H * 0.16, 2, t * 1.6, 0, u);
+      const u = seg(t, 177.35, 180.4);
+      G.sine(gg, W * 0.06, H * 0.34, W * 0.42, H * 0.13, 2, t * 1.6, 0, u);
+      /* "I've studied, I've studied how to properly LOVE / question me, I can answer all."
+         Reading the shot back at 360 fps showed the page almost empty: one thin curve on a blown-out
+         sheet at the most triumphant line in the song. She is showing her working, so the working
+         has to fill the paper - each line going up as she sings past it, the first one on the sheet
+         before the shot has even cut in. */
+      const STEPS = [
+        { at: 177.30, s: 'love : X -> Y', x: 0.52, y: 0.16, z: 28 },
+        { at: 178.17, s: 'dom(love) = me', x: 0.54, y: 0.26, z: 22 },
+        { at: 179.92, s: 'LOVE', x: 0.085, y: 0.66, z: 58 },
+        { at: 181.0, s: 'd/dx love(x) > 0', x: 0.52, y: 0.60, z: 22 },
+        { at: 181.9, s: 'int love dx -> oo', x: 0.52, y: 0.70, z: 22 },
+        { at: 182.8, s: 'Q: how much?', x: 0.08, y: 0.87, z: 24 },
+        { at: 183.4, s: 'A: everything', x: 0.46, y: 0.87, z: 24 },
+      ];
+      for (const st of STEPS) {
+        const a = clamp((t - st.at) / 0.45);
+        if (a <= 0) continue;
+        gg.save(); gg.globalAlpha = a * 0.9;
+        gg.fillStyle = st.s === 'LOVE' ? ACC : INK;
+        G.text(gg, st.s, W * st.x, H * st.y, st.z, 'left', st.s === 'LOVE' ? 600 : 400);
+        gg.restore();
+      }
       if (t > 180.85) {
         const v = oback(seg(t, 180.85, 183.4));
         gg.globalAlpha = v;
-        G.text(gg, 'love(x) =', W * 0.48, H * 0.42, 40, 'left', 500);
+        G.text(gg, 'love(x) =', W * 0.5, H * 0.41, 38, 'left', 500);
         gg.strokeStyle = ACC; gg.lineWidth = 3.4;
-        G.line(gg, W * 0.72, H * 0.36, W * 0.72 + 84 * v, H * 0.36);
-        gg.fillStyle = ACC; if (v > 0.5) G.text(gg, 'x→∞', W * 0.76, H * 0.48, 24, 'left');
+        G.line(gg, W * 0.74, H * 0.37, W * 0.74 + 80 * v, H * 0.37);
+        gg.fillStyle = ACC; if (v > 0.5) G.text(gg, 'x→∞', W * 0.78, H * 0.46, 22, 'left');
         gg.globalAlpha = 1;
       }
       if (t > 183.6) {
