@@ -324,15 +324,23 @@ function cameraAt(t) {
   const cur = SCENES[i < 0 ? SCENES.length - 1 : i];
   const k = clamp01((t - cur.from) / (cur.to - cur.from));
   const f0 = frameOf(cur, k, t);
-  let f = { z: f0.z, x: f0.x, y: f0.y, shake: cur.shake || 0, arc: f0.arc };
+  /* How much of the phrase travel this shot takes. A shot may ask for a share of it, because the
+     travel is what would otherwise carry its own subject out of frame - see trapFrame in scenes.js
+     for the arithmetic of a two-shot. And a shot that already cuts its own framing gets none by
+     default: cut:true means the scene strobes between its own compositions on a beat, and swinging
+     the camera 215 design px away from them at the same time is noise, not movement. Measured before
+     that rule existed, at 160.0 s the chant's number sat at x 585 while the shot aimed at 800, which
+     is what pushed two of its six words against the right edge of the frame. The cutter was told to
+     leave these scenes alone long ago; the camera is now told the same thing. */
+  const travel = (fr, sc) => (fr.arc === undefined ? (sc && sc.cut ? 0 : 1) : fr.arc);
+  let f = { z: f0.z, x: f0.x, y: f0.y, shake: cur.shake || 0, arc: travel(f0, cur) };
   const prev = i > 0 ? SCENES[i - 1] : null;
   if (prev) {
     const since = t - cur.from;
     if (since < SETTLE) {
       const u = since / SETTLE, pf = frameOf(prev, 1, t);
       f = { z: lerp(pf.z, f.z, u), x: lerp(pf.x, f.x, u), y: lerp(pf.y, f.y, u),
-            shake: Math.max(prev.shake || 0, f.shake),
-            arc: lerp(pf.arc === undefined ? 1 : pf.arc, f.arc === undefined ? 1 : f.arc, u) };
+            shake: Math.max(prev.shake || 0, f.shake), arc: lerp(travel(pf, prev), f.arc, u) };
     }
   }
   /* The edit overrides the shot's own framing for as long as its segment lasts. A macro is taken
@@ -427,8 +435,8 @@ function cameraFor(t) {
   const ph = Math.floor(t / P), u = (t - ph * P) / P, arc = Math.sin(u * Math.PI);
   const dir = ph % 2 ? -1 : 1;
   const drift = window.MUSIC ? Math.sin(t * Math.PI * 2 / (32 * 60 / bpm)) * DW * 0.055 : 0;
-  /* A shot that is holding two subjects at once may ask for less of this travel, because the travel
-     is what would carry one of them out of frame. See trapFrame in scenes.js for the arithmetic. */
+  /* The share of the travel this shot takes - cameraAt resolves the default and blends it across a
+     join, so by the time it gets here it is a number rather than an absence. */
   const tv = f.arc === undefined ? 1 : f.arc;
   lastCam = { z: camState.z * (1 + 0.2 * arc * tv), x: camState.x + (drift + arc * DW * 0.1 * dir) * tv,
               y: camState.y - arc * DH * 0.035 * tv, shake: f.shake,

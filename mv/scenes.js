@@ -1245,8 +1245,15 @@ S.push({ id: 'count', from: 158.90, to: 161.58, shake: 1.6, cut: true,
   draw(g, k, F, t, col) {
     const L = { x: 400, y: 250, w: 800, h: 380 };
     room(g, col, F, t, L, { reach: 2.0 });
-    g.save(); g.filter = 'blur(34px)'; g.fillStyle = rgba(ACC, 0.5);
-    g.fillRect(L.x, L.y, L.w, L.h); g.restore();
+    /* The wash behind the number is a light, not a card. It used to be a filled rectangle blurred by
+       34 px, which still leaves two straight edges and two corners once the camera blows it up to
+       z 1.5 - a hard-edged slab of flat red is the one thing this film does nowhere else, where every
+       other field is a gradient with no visible boundary, and at 160 s the slab happened to be clipped
+       by the right and bottom of the frame, so it read as a rendering leftover rather than a choice. */
+    const wash = g.createRadialGradient(DW * 0.5, DH * 0.44, 0, DW * 0.5, DH * 0.44, DW * 0.5);
+    wash.addColorStop(0, rgba(ACC, 0.5)); wash.addColorStop(0.5, rgba(ACC, 0.3));
+    wash.addColorStop(1, rgba(ACC, 0));
+    g.fillStyle = wash; g.fillRect(0, 0, DW, DH);
     const names = ['EIN', 'DOS', 'TROIS', 'NE', 'FEM', 'LIU'];
     const i = Math.min(5, Math.floor((t - 158.9) / 0.44));
     const u = oback(seg(t, 158.9 + i * 0.44, 159.06 + i * 0.44));
