@@ -212,7 +212,7 @@ const CUTS = (() => {
     if (!(inBar === 0 || (inBar === 2 && e > 0.55))) continue;
     if (t - last < (e > 0.55 ? 1.0 : 2.4)) continue;
     last = t; mode = mode % 3 + 1;
-    out.push({ at: t, mode });
+    out.push({ at: t, mode, sc: sc });
   }
   return out;
 })();
@@ -222,7 +222,16 @@ function editAt(t) {
   if (!CUTS.length) return null;
   while (cutI + 1 < CUTS.length && CUTS[cutI + 1].at <= t) cutI++;
   while (cutI > 0 && CUTS[cutI].at > t) cutI--;
-  return t >= CUTS[cutI].at ? CUTS[cutI] : null;
+  const c = CUTS[cutI];
+  if (t < c.at) return null;
+  /* An edit belongs to the shot it was taken in. This used to hand the last cut back for as long
+     as no newer one arrived, so a macro authored for powerdown was still ruling the picture when
+     the film cut to final - and final has no cuts of its own at all, which meant the cutter was
+     holding a close-up across the last six seconds of the movie and flattening the very move that
+     scene is built from (its authored z runs 1.2 -> 0.7, a pull-back; the macro multiplied it by
+     1.85). No editor keeps shot A's close-up playing over shot B. */
+  const sc = SCENES.find((s) => t >= s.from && t < s.to);
+  return sc && sc === c.sc ? c : null;
 }
 
 function actAt(t) {
