@@ -1286,7 +1286,9 @@ if (run.length && (Math.abs(p.a - ...) > 0.12 ||         /* ← 元凶 */
 落点正好是双人镜头，于是"陷阱出现了"这件事是随运镜被揭示的，
 而不是像原来那样对着一个已经框好的空场等 11 秒。
 
-- `analysis/frame-chorus-hold-before.jpg`（70.6 秒，改前）：纸在中间、只露出两根栏贴在右边缘。
+- `analysis/frame-trap-held.jpg`（70.6 秒）在这里是**改前**：纸在中间、只露出两根栏贴在右边缘。
+  同一张图在上一节是"双人镜头已经修好"的**改后**——它确实同时是两者，
+  所以只存这一份，不为了排版好看再复制一个字节相同的文件。
 - `analysis/frame-chorus-hold-after.jpg`（同一时刻，改后）：纸退到左侧，六根栏完整地从上方垂入。
 - `analysis/frame-chorus-travelling.jpg`（62.7 秒）：行程中途，纸压到画面左缘、光标涟漪成为主体。
 
