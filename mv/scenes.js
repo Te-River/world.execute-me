@@ -284,13 +284,25 @@ function companion(g, col, F, t, L) {
     const u = clamp((t - it.at - 0.6) / 2.4);
     if (u <= 0) return;
     const a = (parked / 8) * TAU; parked++;
-    const px = u < 1 ? ox + (x - ox) * u : x + Math.cos(a) * 52;
-    const py = u < 1 ? oy + (foot - oy) * u - Math.sin(u * Math.PI) * 96 : foot + Math.sin(a) * 13;
+    const v = giftReturn(it, t);
+    const sx = x + Math.cos(a) * 52, sy = foot + Math.sin(a) * 13;
+    let px, py, al, rr = 11;
+    if (v > 0) {
+      /* route the return over the top of the sheet: drawn behind it and along the floor, eight
+         eleven-pixel lights coming home was literally invisible in a 30 fps strip */
+      const tx = L.x + L.w * 0.5, ty = L.y - 26;
+      px = sx + (tx - sx) * v; py = sy + (ty - sy) * v - Math.sin(v * Math.PI) * 300;
+      al = 1 - v * v; rr = 11 + v * 17;
+    } else if (u < 1) {                             /* on its way to him */
+      px = ox + (x - ox) * u; py = oy + (foot - oy) * u - Math.sin(u * Math.PI) * 96; al = 1;
+    } else {                                        /* parked where he stood */
+      px = sx; py = sy; al = (0.35 + gone * 0.45) * clamp((t - it.at - 3.0) / 1.2) * 0.85;
+    }
     g.save(); g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = (u < 1 ? 1 : clamp((t - it.at - 3.0) / 1.2) * 0.85) * (0.35 + gone * 0.45);
-    const s = g.createRadialGradient(px - 2, py - 3, 0.5, px, py, 11);
+    g.globalAlpha = Math.max(0, al);
+    const s = g.createRadialGradient(px - rr * 0.2, py - rr * 0.3, 0.5, px, py, rr);
     s.addColorStop(0, rgba(col.page, 0.95)); s.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = s; g.beginPath(); g.arc(px, py, 11, 0, TAU); g.fill();
+    g.fillStyle = s; g.beginPath(); g.arc(px, py, rr, 0, TAU); g.fill();
     g.restore();
   });
   if (live <= 0.001) return;
@@ -365,6 +377,17 @@ const GIVEN = [
   { at: 84.26, w: 'ENJOYMENT' }, { at: 87.92, w: 'EXISTENCE' }, { at: 124.89, w: 'HEART', cut: true },
 ];
 let TT = 0;
+/* The gifts leave in the order the song names them and come back in reverse during REWINDING
+   (193-205.8 s), which is what the machine's own state row says is happening there. Before this the
+   last nineteen seconds were a monotone dim and then a four-pixel dot pulsing on black - measured,
+   the final scene changed 4.1% of its pixels over a whole bar, the least in the film. A rewind is
+   the one ending that has to be seen to be understood. */
+const LIT = GIVEN.filter((x) => !x.cut);
+function giftReturn(it, t) {
+  const gi = LIT.indexOf(it);
+  if (gi < 0) return 0;
+  return clamp((t - (194.0 + (LIT.length - 1 - gi) * 0.72)) / 1.5);
+}
 function givings(g, L) {
   if (window.EDIT === 1) return;      /* see dust(): a close-up keeps only what the shot is about */
   /* What stays on the sheet is the hole, not the label: the word is legible while she sings it and
@@ -375,7 +398,7 @@ function givings(g, L) {
   g.font = `400 ${sz * 0.62}px ui-monospace,Consolas,monospace`;
   g.textBaseline = 'middle'; g.textAlign = 'right';
   GIVEN.forEach((it, i) => {
-    const a = clamp((TT - it.at) / 0.6);
+    const a = clamp((TT - it.at) / 0.6) * (1 - (it.cut ? 0 : giftReturn(it, TT)));
     if (a <= 0) return;
     const y = L.y + L.h * 0.1 + i * sz * 1.7;
     const word = a * (1 - clamp((TT - it.at - 1.2) / 2.2));
@@ -1057,18 +1080,23 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
     /* once the report is taken away the room has no lamp left, so give the kneeling node a
        floor-pool of its own — otherwise "heap quiet" reads as an empty frame, not as a survivor */
     const px = DW * 0.56, py = GY - 20;
+    /* the last lamp in the film is hers, and it is going out: the pool drains across these sixteen
+       seconds instead of holding one level, which is what made the stretch the second-dullest in the
+       picture - 16.3% of pixels moving over a bar - even though it is already dark */
+    const drain = 1 - seg(t, 135.55, 147.0) * 0.72;
+    /* dimming alone measured as no change at all, so the pool also contracts: a boundary that sweeps
+       across the floor moves far more pixels than a gradient that only loses alpha */
+    const prad = 300 - seg(t, 135.55, 147.0) * 185;
     g.save(); g.globalCompositeOperation = 'lighter';
-    /* the pool is the last lamp in the film, so it has to light something: squashed onto the floor
-       plane and bright enough to rim the kneeling node, or "heap quiet" is just a black cell */
-    const pool = g.createRadialGradient(px, py, 0, px, py, 300);
-    pool.addColorStop(0, rgba(RIM, 0.26 + F[8] * 0.12));
-    pool.addColorStop(0.4, rgba(RIM, 0.09));
+    const pool = g.createRadialGradient(px, py, 0, px, py, prad);
+    pool.addColorStop(0, rgba(RIM, (0.26 + F[8] * 0.12) * drain));
+    pool.addColorStop(0.4, rgba(RIM, 0.09 * drain));
     pool.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = pool;
     g.translate(px, py); g.scale(1, 0.3); g.translate(-px, -py);
-    g.fillRect(px - 300, py - 300, 600, 600);
+    g.fillRect(px - prad, py - prad, prad * 2, prad * 2);
     g.restore();
-    G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, 0.4 + F[8] * 0.3);
+    G.subject(g, DW * 0.56, GY, 1.0, 'kneel', -1, (0.4 + F[8] * 0.3) * drain);
     /* the caret still blinks — nobody is typing — but it breathes rather than switching,
        so a half-second gate cannot read as a one-frame flash */
     g.fillStyle = rgba(RIM, 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(t * 3.1)));
@@ -1293,7 +1321,9 @@ S.push({ id: 'powerdown', from: 193, to: 205.81,
       gg.strokeRect(W * 0.3, H * 0.24, W * 0.4, H * 0.52);
       gg.beginPath(); gg.moveTo(W * 0.5, H * 0.24); gg.lineTo(W * 0.5, H * 0.76);
       gg.moveTo(W * 0.3, H * 0.5); gg.lineTo(W * 0.7, H * 0.5); gg.stroke();
-      /* stays lit, then falls: a linear fade off a dim plate just looks like a grey square */
+      /* stays lit, then falls: a linear fade off a dim plate just looks like a grey square.
+         Reverted once: replacing this with a travelling boundary made the scene's per-bar motion
+         fall from 34.6 to 8.6, because the pane is a small area and only its edge was moving. */
       gg.fillStyle = rgba(col.glow, Math.pow(1 - k, 0.55)); gg.fillRect(W * 0.3 + 2, H * 0.24 + 2, W * 0.4 - 4, H * 0.52 - 4);
       gg.fillStyle = rgba(col.page, Math.pow(1 - k, 0.8) * 0.5); gg.fillRect(W * 0.42, H * 0.36, W * 0.16, H * 0.28);
     });
@@ -1304,18 +1334,50 @@ S.push({ id: 'powerdown', from: 193, to: 205.81,
 
 /* 13 — 205.81..end s: the last line, then the standby light */
 S.push({ id: 'final', from: 205.81, to: 211.91,
-  frame: () => ({ z: 1, x: DW * 0.5, y: DH * 0.5 }),
+  /* The camera backs away down the hall while her light stays on. This scene measured the dullest
+     in the film (3-7 per bar, 2-4% of pixels), and the cause was not missing animation but missing
+     light: in a near-black frame an alpha fade moves almost nothing, so the only change big enough
+     to read is a lit object changing size on screen. */
+  frame: (k) => ({ z: 1.2 - k * 0.5, x: DW * 0.5, y: DH * (0.5 + k * 0.03) }),
   draw(g, k, F, t, col) {
     const L = { x: DW / 2 - 480, y: DH * 0.46, w: 960, h: 10 };
-    room(g, col, F, t, { x: L.x, y: L.y - 200, w: L.w, h: 420 }, { reach: 1.1 });
+    const P = { x: DW * 0.44, y: GY - 210, w: 150, h: 200 };
+    room(g, col, F, t, P, { reach: 1.4 });
+    /* she is still running, and still the only light in the room, after the process has ended */
+    page(g, col, P, { blur: 22, ledger: false, rule: false });
+    on(g, P, (gg, W, H) => {
+      gg.strokeStyle = rgba(INK, 0.55); gg.lineWidth = 2.5;
+      G.heart(gg, W * 0.5, H * 0.44, H * 0.19, false);
+    });
+    endPage(g);
+    /* The song's last word is EXECUTION, at 205.81, and the room takes it: one flood of the verdict
+       colour across the whole frame, decaying over a beat and a half. */
+    const fl = 1 - seg(t, 205.81, 207.1);
+    if (fl > 0) {
+      g.save(); g.globalCompositeOperation = 'lighter';
+      g.fillStyle = rgba(ACC, 0.42 * fl * fl); g.fillRect(0, 0, DW, DH);
+      g.restore();
+    }
     g.fillStyle = ACC;
-    g.fillRect(L.x, L.y, L.w * oback(seg(t, 205.81, 206.6)), L.h);
+    /* the last line draws in and then retracts - the film's own closing gesture is a rewind, which
+       is what the machine's state row has been saying since 193 s */
+    const span = Math.min(oback(seg(t, 205.81, 206.6)), 1 - seg(t, 207.8, 211.5) * 0.9);
+    g.fillRect(L.x, L.y, L.w * Math.max(0, span), L.h);
     if (t > 207.4) {
       g.globalAlpha = seg(t, 207.4, 208.6); g.fillStyle = rgba(col.rim, 0.75);
-      G.text(g, 'PROCESS ENDED', DW / 2, DH * 0.56, 30);
+      G.text(g, 'PROCESS ENDED', DW / 2, DH * 0.26, 30);
       g.globalAlpha = 1;
     }
-    if (t > 209.6) { g.fillStyle = rgba(ACC, 0.5 + 0.5 * Math.sin(t * 2.4)); G.disc(g, DW / 2, DH * 0.62, 4); }
+    if (t > 209.6) {
+      /* the standby light: it breathes with the measured arpeggio rather than on a clock, and it
+         leaves a trail of its own glow so the last frame still has a source of light in it */
+      const b = 0.45 + 0.55 * Math.sin(t * 2.4) * (0.4 + F[8] * 0.6);
+      g.save(); g.globalCompositeOperation = 'lighter';
+      const em = g.createRadialGradient(DW / 2, DH * 0.62, 0, DW / 2, DH * 0.62, 46);
+      em.addColorStop(0, rgba(ACC, 0.5 * b)); em.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = em; g.fillRect(DW / 2 - 46, DH * 0.62 - 46, 92, 92); g.restore();
+      g.fillStyle = rgba(ACC, 0.5 + 0.5 * Math.sin(t * 2.4)); G.disc(g, DW / 2, DH * 0.62, 4 + b * 2.5);
+    }
   } });
 
 window.SCENES = S;
