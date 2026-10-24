@@ -187,6 +187,13 @@ function hooks(LYRICS) {
   return HOOKS;
 }
 function display(g, t, W, H, pal, LYRICS, camZ) {
+  /* The counting chant (158.90-161.58) already paints each number as the whole scene - EIN, DOS,
+     TROIS, NE, FEM, LIU full-bleed on a red field. The karaoke line was drawing the same word a
+     second time, and the bottom-centre anchor dropped that copy straight onto the row of
+     crossed-out dots the scene is counting, so the picture was overwriting its own argument.
+     Only the word is stood down: the Chinese annotation (三 · 法语) is the one thing that makes a
+     six-language count intelligible, so it stays and moves above the number instead. */
+  const chant = t >= 158.90 && t < 161.58;
   const hs = hooks(LYRICS);
   const h = hs.find((x) => t >= x.from && t < x.to);
   if (!h) return;
@@ -200,26 +207,28 @@ function display(g, t, W, H, pal, LYRICS, camZ) {
      which is how the references get their cropped, larger-than-screen words. */
   const ANCH = [[0.045, 0.16, 'left'], [0.5, 0.9, 'center'], [0.045, 0.76, 'left'],
                 [0.5, 0.15, 'center'], [0.045, 0.44, 'left'], [0.5, 0.9, 'center']];
-  const a = ANCH[hs.indexOf(h) % ANCH.length];
+  const a = chant ? [0.5, 0.15, 'center'] : ANCH[hs.indexOf(h) % ANCH.length];
   const x = W * a[0], y = H * a[1];
+  if (!chant) {
+    g.save();
+    g.font = `300 ${size}px Georgia,"Times New Roman",serif`;
+    g.textAlign = a[2]; g.textBaseline = 'middle';
+    const tw = g.measureText(h.w).width;
+    const left = a[2] === 'left' ? x : a[2] === 'right' ? x - tw : x - tw / 2;
+    /* the wipe has to start *before* the word: this rect used to carry a +12/+4 lead-in, so the
+       first frame of a hook already showed ~16 px of the letter and the 120 fps sweep read that
+       pop as an unexplained flash */
+    g.beginPath(); g.rect(0, 0, left - 8 + (tw + 16) * u, H); g.clip();
+    g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
+    g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
+    g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);
+    g.restore();
+  }
   g.save();
-  g.font = `300 ${size}px Georgia,"Times New Roman",serif`;
-  g.textAlign = a[2]; g.textBaseline = 'middle';
-  const tw = g.measureText(h.w).width;
-  const left = a[2] === 'left' ? x : a[2] === 'right' ? x - tw : x - tw / 2;
-  /* the wipe has to start *before* the word: this rect used to carry a +12/+4 lead-in, so the
-     first frame of a hook already showed ~16 px of the letter and the 120 fps sweep read that pop
-     as an unexplained flash */
-  g.beginPath(); g.rect(0, 0, left - 8 + (tw + 16) * u, H); g.clip();
-  g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
-  g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
-  g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);
-  g.restore();
-  g.save();
-  g.globalAlpha = clamp(u * 2); g.fillStyle = rgba(pal.rim, 0.34);
+  g.globalAlpha = clamp(u * 2); g.fillStyle = rgba(pal.rim, chant ? 0.72 : 0.34);
   g.font = `300 ${Math.round(size * 0.16)}px Georgia,serif`;
   g.textAlign = a[2]; g.textBaseline = 'middle';
-  g.fillText(h.cn, x + 2, y + size * 0.62);
+  g.fillText(h.cn, x + 2, y + size * (chant ? 0.3 : 0.62));
   g.restore();
 }
 
