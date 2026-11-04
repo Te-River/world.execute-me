@@ -509,7 +509,18 @@ function composite(t, reduced) {
      noise-like passages (flatness 18-25 under the verses, 43-73 at the chorus entries and
      the outro's chip arpeggio), so the film's own grain swells with the noise floor. */
   cx.globalAlpha = 0.04 + raw[14] * 0.1;
-  cx.translate(Math.floor(rnd() * 128) - 64, Math.floor(rnd() * 128) - 64);
+  /* The jitter is keyed to the frame's own time at the rate the film is displayed, not to a
+     counter that advances once per render. It used to be the counter, which meant two things:
+     a 360 fps sweep saw four different grain offsets inside one displayed frame - so the
+     frame-to-frame difference it measured included jitter nobody watching the film will ever
+     see - and the same instant rendered twice from different histories gave different pixels.
+     Measured: re-rendering t = 19.197 with nothing else in between changed the pixel hash while
+     the mean luminance held at 117, and after scrubbing elsewhere the luminance itself moved
+     106 -> 117. That is why the spike census wobbled between sweeps (62, then 65) while the
+     verdict stayed at zero: the threshold sits close enough to the grain floor for the floor to
+     cross it. The look is unchanged - at 60 fps the grain still jumps every frame. */
+  const gj = (Math.round(t * 60) * 2654435761) >>> 0;
+  cx.translate((gj & 127) - 64, ((gj >>> 7) & 127) - 64);
   cx.fillStyle = grainPat; cx.fillRect(-64, -64, W + 128, HH + 128);
   cx.restore();
   const vg = cx.createRadialGradient(W / 2, HH / 2, Math.min(dw, dh) * 0.3, W / 2, HH / 2, Math.max(dw, dh) * 0.72);
