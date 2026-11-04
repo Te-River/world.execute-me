@@ -668,7 +668,13 @@ S.push({ id: 'globe', from: 16, to: 29.7,
 
 /* 3 — 29.7..44.45 s: the four offers, drawn on the page the instance is handed */
 S.push({ id: 'geometry', from: 29.7, to: 44.45,
-  frame: (k) => ({ z: 1.18, x: DW * 0.44, y: DH * 0.48 }),
+  /* This shot names four definitions roughly every 3.6 s - DIMENSION 32.68, CIRCUMFERENCE 36.28,
+     TANGENTS 40.04, LIMITATIONS 43.50 - and the recording climbs across the whole fifteen seconds:
+     measured rms by third is 133 / 162 / 179, the steepest build of any long shot in the film
+     (+46, about +35%). The camera used to take k and never use it: one locked composition at
+     z 1.18 while the band loaded. It now closes steadily, so the approach and the build are the
+     same gesture. */
+  frame: (k) => ({ z: 1.08 + k * 0.34, x: DW * 0.44, y: DH * (0.48 - k * 0.02) }),
   draw(g, k, F, t, col) {
     const L = { x: 330, y: 150, w: 700, h: 520 };
     room(g, col, F, t, L);
@@ -1141,6 +1147,27 @@ S.push({ id: 'left', from: 110.9, to: 131.22,
   } });
 
 /* 9 — 131.22..147.66 s: nothing scheduled */
+/* The recording's own shape over the tail of this shot, measured from the decoded analysis
+   (music.data.js, hop 512 @ 22050 Hz) as mean rms per two seconds:
+     133-135 167 | 135-137 173 | 137-139 166 | 139-141 157 | 141-143 161
+     143-145 170 | 145-147 164 | 147-149 172
+   It is a plateau with a dip in the middle that lifts again before EXECUTION - 164 is the same
+   level as the second chorus (166), and only 9% under the sentencing (180). This shot has one
+   sung line in sixteen seconds (131.22 ILLEGAL ARGUMENTS; the next is 147.66), and that is what
+   made the picture behave like a silence. It is not a silence. */
+const VOID_LOAD = [[135.5, 173], [137.5, 166], [139.5, 157], [141.5, 161],
+                   [143.5, 170], [145.5, 164], [147.66, 172]];
+function voidLoad(t) {
+  const a = VOID_LOAD;
+  if (t <= a[0][0]) return a[0][1];
+  for (let i = 1; i < a.length; i++) {
+    if (t <= a[i][0]) {
+      const u = (t - a[i - 1][0]) / (a[i][0] - a[i - 1][0]);
+      return a[i - 1][1] + (a[i][1] - a[i - 1][1]) * u;
+    }
+  }
+  return a[a.length - 1][1];
+}
 S.push({ id: 'void', from: 131.22, to: 147.66,
   frame: (k) => ({ z: 0.94 - k * 0.06, x: DW * 0.54, y: DH * 0.54 }),
   draw(g, k, F, t, col) {
@@ -1171,13 +1198,18 @@ S.push({ id: 'void', from: 131.22, to: 147.66,
     /* once the report is taken away the room has no lamp left, so give the kneeling node a
        floor-pool of its own — otherwise "heap quiet" reads as an empty frame, not as a survivor */
     const px = DW * 0.56, py = GY - 20;
-    /* the last lamp in the film is hers, and it is going out: the pool drains across these sixteen
-       seconds instead of holding one level, which is what made the stretch the second-dullest in the
-       picture - 16.3% of pixels moving over a bar - even though it is already dark */
-    const drain = 1 - seg(t, 135.55, 147.0) * 0.72;
+    /* the last lamp in the film is hers, and it is going out - but it goes out in the shape the
+       recording is actually in, not along a straight line. The ramp that was here reached the
+       darkest, smallest pool of the whole shot 0.6 s before EXECUTION, the heaviest word in the
+       movie, while the measured loudness had already been lifting back for four seconds
+       (157 at 139-141 -> 172 at 147-149). So the level now rides that contour: the room dims into
+       the dip and gathers itself again as the band loads the next hit, which is also the plot. */
+    const nrm = clamp((voidLoad(t) - 157) / 16);
+    const drain = 0.36 + nrm * 0.64;
     /* dimming alone measured as no change at all, so the pool also contracts: a boundary that sweeps
-       across the floor moves far more pixels than a gradient that only loses alpha */
-    const prad = 300 - seg(t, 135.55, 147.0) * 185;
+       across the floor moves far more pixels than a gradient that only loses alpha. It now bottoms
+       out at the dip instead of at the word, and opens again with the lift. */
+    const prad = 300 - seg(t, 135.55, 143.0) * 150 + nrm * 45;
     g.save(); g.globalCompositeOperation = 'lighter';
     const pool = g.createRadialGradient(px, py, 0, px, py, prad);
     /* Reading the stretch back at one frame per two seconds, six of those frames were the same
@@ -1276,7 +1308,13 @@ S.push({ id: 'count', from: 158.90, to: 161.58, shake: 1.6, cut: true,
    a time until one arm is left — mine — and the word that means 执行 in the sense of running
    code has become the word for the one who runs it. */
 S.push({ id: 'give', from: 161.58, to: 169.82, shake: 1,
-  frame: (k) => ({ z: 1.0, x: DW * 0.46, y: DH * 0.5 - k * 0.02 * DH }),
+  /* The other locked camera in the film, and the second-steepest build: rms 172 / 200 / 204 across
+     these eight seconds. Seven nodes are struck out here starting at 162.63, so the shot already
+     contains its own event; what it lacked was any reason for the frame to be involved in it.
+     It closes as the queue empties. The x it authors stays put on purpose: at z 1.22 the sheet only
+     tolerates camx up to 972 and the phrase travel already reaches 984, so asking for a lateral slide
+     as well would spend the shot's motion fighting boundToSheet instead of showing it. */
+  frame: (k) => ({ z: 1.0 + k * 0.22, x: DW * 0.46, y: DH * 0.5 - k * 0.02 * DH }),
   draw(g, k, F, t, col) {
     const L = { x: 250, y: 148, w: 760, h: 560 };
     room(g, col, F, t, L, { reach: 1.6 });

@@ -346,10 +346,19 @@ function cameraAt(t) {
   /* The edit overrides the shot's own framing for as long as its segment lasts. A macro is taken
      on the sheet as it stands in this shot, which is why scenes.js publishes the rect it is using. */
   const ed = editAt(t);
+  /* What the cutter asked for is not the same as what the camera did. A mode-1 macro is a close-up
+     on the sheet, and in void the sheet is taken away at 135.55 while the cut authored inside that
+     shot keeps running - so from 144 s the camera is told to push into a page that is not there.
+     sheetNow() already stops it from moving, but the flag used to be published anyway, and the
+     telemetry panel hides itself on EDIT === 1: the readout went blank for the last four seconds of
+     the passage for no reason the audience can see, and any measurement that skips EDIT frames
+     silently stops covering them. EDIT now reports the reframe that actually happened. */
+  f.edit = ed ? ed.mode : 0;
   if (ed && ed.mode !== 0) {
     const S = sheetNow(t);
-    if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake, arc: f.arc }; }
-    else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake, arc: f.arc }; }
+    if (ed.mode === 1 && S) { f = { z: f.z * 1.85, x: S.x + S.w / 2, y: S.y + S.h * 0.46, shake: f.shake, arc: f.arc, edit: 1 }; }
+    else if (ed.mode === 2) { f = { z: f.z * 0.72, x: DW * 0.5, y: DH * 0.52, shake: f.shake, arc: f.arc, edit: 2 }; }
+    else if (ed.mode === 1) { f = { z: f.z, x: f.x, y: f.y, shake: f.shake, arc: f.arc, edit: 0 }; }
     if (t - ed.at < 0.06) f.editHard = true;
   }
   return f;
@@ -446,8 +455,7 @@ function cameraFor(t) {
      the ledger's grey boxes, the telemetry column and the dust all sit at the same visual weight as
      the diagram, so the close-up had no thing to look at and a dead band of room down its right
      edge. A real camera simplifies as it pushes in; this one now does too. */
-  const ed = editAt(t);
-  window.EDIT = ed ? ed.mode : 0;
+  window.EDIT = f.edit || 0;
   return lastCam;
 }
 

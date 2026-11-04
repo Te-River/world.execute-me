@@ -470,6 +470,17 @@ async function framing(step) {
   for (const sc of window.SCENES) {
     let n = 0, cut = 0, worst = 0, worstAt = 0, worstLate = 0, lateAt = 0, offSum = 0, overWorst = 0, overAt = 0;
     for (let t = sc.from + 0.12; t < sc.to - 0.05; t += step) {
+      /* Warm the camera up before reading it. boundToSheet eases its correction across a shot
+         boundary with SLEW 0.2 s, and this loop arrives at every sample from a different time, so a
+         single render at t has not converged yet - measured: framing(1.5) reported give sitting
+         34% outside the bound's window at 169.2 s, while sampling the same eight seconds
+         sequentially put 0 of 241 frames outside it, with the offset parked exactly on the allowed
+         reach. Without the warm-up this instrument overstates every scene's bleed by however far the
+         camera has not yet travelled back. */
+      for (let w = 3; w > 0; w--) {
+        const tw = Math.max(sc.from + 0.01, t - w * step / 4);
+        window.MV.pin(tw); window.MV.step(tw * 1000);
+      }
       window.MV.pin(t); window.MV.step(t * 1000);
       const S = window.SHEET, c = window.MV.cam();
       /* page() stamps the time it drew, so a stamp equal to this t proves the sheet is in this
