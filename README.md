@@ -1180,6 +1180,10 @@ if (run.length && (Math.abs(p.a - ...) > 0.12 ||         /* ← 元凶 */
 - `analysis/frame-heart-away.jpg`（190.6 秒）——**全片论点"笼子一直是心的轮廓"落地的瞬间**：
   心四分之三在画框外，只露左半边一弧；观众此刻看见的是"一页公式 + 半颗被裁掉的心"。
 
+改后同一批时刻：`analysis/frame-trap-held.jpg`（70.6 秒，笼栏完整垂入）、
+`analysis/frame-heart-held.jpg`（190.6 秒，心完整成形在栏内）、
+`analysis/frame-trap-free-held.jpg`（192.2 秒，栏退场、心留下）。
+
 第二个毛病是笼子本身：`yTop` 从 `DH·0.06` 走到 `GY`、`yBot` 钉在 `GY+20`，
 所以它不是"落下"，是**塌缩**——最后 0.1 秒变成地上一截 20 px 的红桩（见 `frame-cage-standing.jpg`
 改前对照）。歌唱到 74 秒还在唱 trapped，画面里的牢已经先消失了。
@@ -1584,13 +1588,20 @@ node analysis/serve.mjs         # http://127.0.0.1:8773/index.html，抓图落�
 ```
 document.head.appendChild(Object.assign(document.createElement('script'),
   { src: '/analysis/verify.js' }))
-await VERIFY.start(120)         // 立刻返回，后台扫 25,429 帧（约 183 秒）
+VERIFY.start(360)               // 只建状态，不自己跑
+VERIFY.drive(1500000)           // 在调用内同步扫到预算用完再返回；反复调用直到 done
 VERIFY.status()                 // {n, N, done, flags, seconds}
-await VERIFY.report()           // 写 verify-120fps.png + sheet-a/b.jpg，并回传归因结果
+await VERIFY.report()           // 写 verify-360fps.png + sheet-a/b.jpg，并回传归因结果
 VERIFY.flickers()               // 每一个孤立尖峰：{t, peak, scene, cause}
 await VERIFY.shot(111.5, 'frame-star.jpg')   // 把任意一帧按 1920×1080 真渲染并存盘
 VERIFY.timbre(15)               // 顺带回答"配器到底是几种"
 ```
+
+`drive(ms)` 的形状是被这个宿主逼出来的：扫描只要把控制权让给任何异步回调
+（定时器、或一次 `fetch` 的续延），标签页就会被冻住，一轮几分钟的扫描能挂几个小时。
+同步切片之间页面被冻也无所谓——计数器和数组都在页面里，没有挂在待触发的回调上。
+预算按毫秒而不是帧数给，因为不同镜头的单帧代价差五倍（实测 2.4 → 12.7 ms），
+而调用方的超时是写死的 15 秒：超时的那次调用不会被取消，页面会把活干完。
 
 证据图一律走 `shot()`：它把舞台的 CSS 盒子按 1920×1080 摆好、派发 `resize`、pin 住时钟再渲染，
 然后把 canvas 自己 POST 给本地服务存盘。之所以不让截图工具来拍，是因为 hidden 页面的
