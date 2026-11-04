@@ -193,7 +193,7 @@ function hooks(LYRICS) {
   });
   return HOOKS;
 }
-function display(g, t, W, H, pal, LYRICS, camZ) {
+function display(g, t, W, H, pal, LYRICS, camZ, avoid) {
   /* The counting chant (158.90-161.58) already paints each number as the whole scene - EIN, DOS,
      TROIS, NE, FEM, LIU full-bleed on a red field. The karaoke line was drawing the same word a
      second time, and the bottom-centre anchor dropped that copy straight onto the row of
@@ -225,7 +225,20 @@ function display(g, t, W, H, pal, LYRICS, camZ) {
     /* the wipe has to start *before* the word: this rect used to carry a +12/+4 lead-in, so the
        first frame of a hook already showed ~16 px of the letter and the 120 fps sweep read that
        pop as an unexplained flash */
-    g.beginPath(); g.rect(0, 0, left - 8 + (tw + 16) * u, H); g.clip();
+    /* A word the page covers from one end reads as a word continuing behind the light, which is the
+       effect this layer exists for. A word the page covers in the MIDDLE reads as a typo: at
+     131.22 s ILLEGAL ARGUMENTS is 17 glyphs wide, the sheet ends around screen x 1246 and the word
+     runs to ~1708, so the frame showed "ILLEGAL A" + paper + "MENTS" - and the same thing happens to
+     the title line at 16 s, where the globe sits inside world.execute(me);. So where the sheet lies
+     strictly inside the word, the wipe is cut at the sheet's near edge and the hidden part stays
+     hidden instead of reappearing on the far side. Only the left-anchored words need this; the
+     centred ones sit above or below the sheet's band and never collide with it. */
+    let clip = (tw + 16) * u;
+    if (avoid && a[2] === 'left') {
+      const x0 = Math.min(avoid[0], avoid[1]);
+      if (x0 > left + 24 && x0 < left + tw) clip = Math.min(clip, x0 - left - 8);
+    }
+    g.beginPath(); g.rect(0, 0, left - 8 + clip, H); g.clip();
     g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
     g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
     g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);

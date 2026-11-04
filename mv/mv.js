@@ -716,7 +716,14 @@ function render(ts) {
      behind it — the word reads as emerging out of the light, not as an overlay on top of it. */
   bx.setTransform(1, 0, 0, 1, 0, 0);
   if (window.MUSIC) {
-    MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z);
+    /* Where the sheet will sit on screen this frame, in screen px, so the display line can avoid
+     * being punched through by it. page() draws the sheet at 0.76 of L about its centre, which is the
+     * same 0.12/0.88 the bound reads; roll and shake are left out because the guard only needs to
+     * know roughly where the light is, and the word is cut a few px early rather than clipped twice. */
+    const sh = sheetNow(t), sc0 = fitScale() * cam.z;
+    const avoid = sh ? [(sh.x + sh.w * 0.12 - cam.x) * sc0 + W / 2,
+                       (sh.x + sh.w * 0.88 - cam.x) * sc0 + W / 2] : null;
+    MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z, avoid);
     MVL.chrome(bx, t, W, HH, pal, raw);
   }
   const nxt = SCENES[idx + 1];
