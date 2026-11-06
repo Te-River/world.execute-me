@@ -132,7 +132,21 @@ function start(rate) {
      and sits there while the caller waits. One run of 76,287 frames, four minutes of arithmetic at
      3.5 ms a frame, went ninety-five minutes without passing frame 240 again. So the state is built
      here and driven from outside: whatever the tab does between two calls, the arrays and the frame
-     counter live in the page and nothing is lost, and each call answers before it can be frozen. */
+     counter live in the page and nothing is lost, and each call answers before it can be frozen.
+
+     Two consequences, both measured this round, that decide how the sweep should be driven:
+     - the budget may be LONGER than the caller's own timeout. A drive(240000) issued through the
+       in-app evaluate returns "timed out after 15000ms", yet the page keeps running the same
+       synchronous loop: measured, n went 13,503 -> 32,714 (+19,211 frames, 80 frames/s) across four
+       calls that all reported timeouts. So a whole film costs one long drive plus polls, not one
+       call per 13.5 s slice - which is what made the full-film census expensive enough to skip.
+       Only ONE drive runs at a time, though: while the page is inside a loop, a second evaluate is
+       dropped rather than queued (four 240 s budgets were fired and exactly one was spent), so the
+       pattern is fire - poll - fire again, never fire several in the hope they add up.
+     - the arrays cannot be persisted to survive a reload. The only sink is a POST from the page,
+       and a fetch started by a hidden tab is exactly the async handoff that never completes here
+       (finish()'s sweep.json has never landed). Resume must therefore come from the page staying
+       alive, not from disk. */
   S.drive = (ms) => {
     const stop = performance.now() + ms;
     while (f < S.N && performance.now() < stop) {
