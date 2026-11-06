@@ -140,10 +140,20 @@ function start(rate) {
           for (let i = 0; i < d.length; i += 16) { hist[Math.max(d[i], d[i + 1], d[i + 2])]++; n++; }
           let med = 255, acc = 0;
           for (let l = 0; l < 256; l++) { acc += hist[l]; if (acc >= n / 2) { med = l; break; } }
-          /* relative, not absolute: with a fixed cut, an act whose paper merely got dimmer would
-             score as "more ink", which rewards the wrong thing - the same mistake det made when it
-             counted grain as structure */
-          const thr = Math.round(med * 0.62);
+          /* Relative to the sheet's own median, but by a fixed STEP, not a ratio, and the step was
+             calibrated on the film's own shots. A ratio (median * 0.62) was measured first and is
+             wrong: back at 173.53 s is the densest card in the film - ten lines of the program, each
+             struck through as the rewind cancels it - yet it scored 0.08%, because the whole room is
+             tinted red there, the paper goes with it, and a ratio threshold rises with the tint until
+             dark red ink stops counting. Ranking the six shots by eye and by candidate threshold:
+               threshold      back  chorus1  boot  void  gifts  study     (eye: back/study/boot high,
+               median*0.62    0.08   1.14   6.02  0.05  3.13   7.02       void lowest)
+               median-40     22.4   16.6   26.18 15.0  22.4   31.5
+               median-2*MAD  12.1   16.0    9.18  0.0  11.1   17.1
+             Only median-40 puts the three text-dense cards on top and void at the bottom; the MAD
+             variants let chorus1 outrank boot, which it does not. A false negative here is worse than
+             no metric at all - it sends the next round to fix the wrong shot. */
+          const thr = med - 40;
           let dark = 0;
           for (let l = 0; l <= thr; l++) dark += hist[l];
           S.ink[f] = Math.min(255, Math.round(dark / n * 1000));      /* 0.1% of the sheet */
