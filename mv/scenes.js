@@ -901,6 +901,21 @@ S.push({ id: 'chorus1', from: 59.22, to: 74.04,
     const px = lerp(0.2, 0.42, gu), py = lerp(0.78, 0.46, gu);
     on(g, L, (gg, W, H) => {
       gg.strokeStyle = INK; gg.fillStyle = INK; gg.lineWidth = 2.2;
+      /* The three things the chorus sings are requests, and a request that is only drawn as four
+         half-alpha ripples is not on the page at all: measured at 62 s the sheet averages 222.3
+         luminance with 0.31% of it darker than 150, on the loudest act in the film (mean rms
+         0.661). The comparator is free at 186 s, whose card carries a whole equation in the same
+         register as the command below - so the asks are written as lines of code, wiped in the way
+         '> run execution' already is, and they arrive on the beats the words arrive on. */
+      const ASK = [[59.68, 'if (i can) have stimulations'], [65.39, 'if (i can) have satisfaction']];
+      ASK.forEach((it, i) => {
+        const a = seg(t, it[0], it[0] + 1.1);
+        if (a <= 0) return;
+        const y = H * (0.14 + i * 0.095);
+        gg.save(); gg.beginPath(); gg.rect(W * 0.07, y - H * 0.06, a * W * 0.72, H * 0.12); gg.clip();
+        gg.fillStyle = INK; G.text(gg, it[1], W * 0.08, y, 27, 'left');
+        gg.restore();
+      });
       if (t > 59.68 && t < 66.6) {                           /* STIMULATIONS — it starts on "if I can" */
         const u = seg(t, 59.68, 65.3);
         gg.strokeStyle = ACC; gg.lineWidth = 2.6;
