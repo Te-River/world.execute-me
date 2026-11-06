@@ -1,0 +1,212 @@
+[
+ {
+  "scene": "boot",
+  "from": 0,
+  "n": 6,
+  "confN": 5,
+  "lowConfN": 1,
+  "inkMedConf": 28.07,
+  "medRange": [
+   149,
+   236
+  ]
+ },
+ {
+  "scene": "globe",
+  "from": 16,
+  "n": 0,
+  "confN": 0,
+  "lowConfN": 0,
+  "inkMedConf": null,
+  "medRange": null
+ },
+ {
+  "scene": "geometry",
+  "from": 29.7,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 22.03,
+  "medRange": [
+   221,
+   240
+  ]
+ },
+ {
+  "scene": "current",
+  "from": 44.45,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 16.74,
+  "medRange": [
+   211,
+   240
+  ]
+ },
+ {
+  "scene": "chorus1",
+  "from": 59.22,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 20.59,
+  "medRange": [
+   222,
+   240
+  ]
+ },
+ {
+  "scene": "gifts",
+  "from": 74.04,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 19.74,
+  "medRange": [
+   209,
+   234
+  ]
+ },
+ {
+  "scene": "switches",
+  "from": 88.613,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 25.36,
+  "medRange": [
+   228,
+   245
+  ]
+ },
+ {
+  "scene": "left",
+  "from": 110.9,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 22.06,
+  "medRange": [
+   189,
+   209
+  ]
+ },
+ {
+  "scene": "void",
+  "from": 131.22,
+  "n": 1,
+  "confN": 0,
+  "lowConfN": 1,
+  "inkMedConf": null,
+  "medRange": [
+   164,
+   164
+  ]
+ },
+ {
+  "scene": "chant",
+  "from": 147.66,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 19.03,
+  "medRange": [
+   222,
+   237
+  ]
+ },
+ {
+  "scene": "sentence",
+  "from": 155.2,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 18.06,
+  "medRange": [
+   236,
+   238
+  ]
+ },
+ {
+  "scene": "count",
+  "from": 158.9,
+  "n": 0,
+  "confN": 0,
+  "lowConfN": 0,
+  "inkMedConf": null,
+  "medRange": null
+ },
+ {
+  "scene": "give",
+  "from": 161.58,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 20.3,
+  "medRange": [
+   210,
+   237
+  ]
+ },
+ {
+  "scene": "back",
+  "from": 169.82,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 22.64,
+  "medRange": [
+   211,
+   244
+  ]
+ },
+ {
+  "scene": "study",
+  "from": 177.24,
+  "n": 6,
+  "confN": 6,
+  "lowConfN": 0,
+  "inkMedConf": 25.12,
+  "medRange": [
+   228,
+   244
+  ]
+ },
+ {
+  "scene": "free",
+  "from": 184.54,
+  "n": 6,
+  "confN": 5,
+  "lowConfN": 1,
+  "inkMedConf": 21.78,
+  "medRange": [
+   161,
+   234
+  ]
+ },
+ {
+  "scene": "powerdown",
+  "from": 193,
+  "n": 6,
+  "confN": 0,
+  "lowConfN": 6,
+  "inkMedConf": null,
+  "medRange": [
+   114,
+   146
+  ]
+ },
+ {
+  "scene": "final",
+  "from": 205.81,
+  "n": 6,
+  "confN": 0,
+  "lowConfN": 6,
+  "inkMedConf": null,
+  "medRange": [
+   122,
+   131
+  ]
+ }
+]

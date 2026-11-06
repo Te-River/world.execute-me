@@ -81,6 +81,7 @@ function start(rate) {
        to be found by hand. 255 means "no sheet this frame"; only every 10th frame is sampled, at
        4 px stride, because a full-res read costs about as much as the render itself. */
     ink: new Uint8Array(N).fill(255),
+    inkMed: new Uint8Array(N).fill(255),
     sheetA: sheet(Math.min(14, Math.ceil(106 / COLS))), sheetB: sheet(14)
   };
   let camx = 0, camy = 0;
@@ -157,6 +158,12 @@ function start(rate) {
           let dark = 0;
           for (let l = 0; l <= thr; l++) dark += hist[l];
           S.ink[f] = Math.min(255, Math.round(dark / n * 1000));      /* 0.1% of the sheet */
+          /* ...and the sheet's own median, because the step is only meaningful against it.
+             powerdown at 198.69 s read 0.48% while carrying six lines of the program: the lamp is
+             powering down, the paper is dark, and ink 40 below the median simply is not 40 darker
+             than a dim paper in the first place. Storing the percentage alone therefore invites
+             exactly the mistake the percentage was added to avoid. */
+          S.inkMed[f] = med;
         }
       }
     }
@@ -247,20 +254,24 @@ function stats() {
   flags.sort((a, b) => a[0] - b[0]);
   const perAct = ACTS.map((a) => {
     const f0 = Math.round(a.from * rate), f1 = Math.min(N, Math.round(a.to * rate));
-    let dm = 0, dp = 0, dt = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255;
+    let dm = 0, dp = 0, dt = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255, lowconf = 0;
     const ds = [], inkv = [];
     for (let f = f0; f < f1; f++) {
       ds.push(S.dif[f]); dm += S.dif[f]; dp += S.pdx[f] + S.pdy[f]; dt += S.det[f];
       dmax = Math.max(dmax, S.dif[f]); pmax = Math.max(pmax, S.pdx[f] + S.pdy[f]);
       lmin = Math.min(lmin, S.lum[f]); smin = Math.min(smin, S.sat[f]); n++;
-      if (S.ink[f] !== 255) inkv.push(S.ink[f]);
+      if (S.ink[f] !== 255) {
+        /* a reading is only ink on a sheet bright enough for 40 to mean something; below that the
+           number is a statement about the lamp, not about the writing */
+        if (S.inkMed[f] >= 180) inkv.push(S.ink[f]); else lowconf++;
+      }
     }
     ds.sort((x, y) => x - y);
     inkv.sort((x, y) => x - y);
     return { act: a.tag, from: a.from, frames: n,
              inkPct: inkv.length ? +(inkv[inkv.length >> 1] / 10).toFixed(2) : null,
              inkPctMin: inkv.length ? +(inkv[0] / 10).toFixed(2) : null,
-             inkFrames: inkv.length,
+             inkFrames: inkv.length, inkLowConf: lowconf,
              motion: +(dm / n).toFixed(1), motionP95: ds[Math.floor(n * 0.95)], motionMax: dmax,
              detail: +(dt / n).toFixed(1),
              pan: +(dp / n).toFixed(1), panMax: pmax, minLum: lmin, minSat: smin };
