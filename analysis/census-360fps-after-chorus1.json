@@ -1,0 +1,189 @@
+{
+ "st": {
+  "n": 76287,
+  "N": 76287,
+  "done": true,
+  "flags": 0,
+  "seconds": 1045.5
+ },
+ "spikes": 63,
+ "by": {
+  "beat-cut": 28,
+  "dissolve": 23,
+  "hard-cut": 12
+ },
+ "flash": [],
+ "window55_80": [
+  {
+   "f": 19887,
+   "t": 55.242,
+   "run": 1,
+   "peak": 96,
+   "scene": "current",
+   "cause": "beat-cut"
+  },
+  {
+   "f": 21320,
+   "t": 59.222,
+   "run": 1,
+   "peak": 10,
+   "scene": "chorus1",
+   "cause": "dissolve"
+  },
+  {
+   "f": 26655,
+   "t": 74.042,
+   "run": 1,
+   "peak": 16,
+   "scene": "gifts",
+   "cause": "dissolve"
+  },
+  {
+   "f": 28689,
+   "t": 79.692,
+   "run": 1,
+   "peak": 79,
+   "scene": "gifts",
+   "cause": "beat-cut"
+  }
+ ],
+ "perAct": [
+  {
+   "act": "boot",
+   "from": 0,
+   "motionMax": 67,
+   "detail": 51.3,
+   "minLum": 59,
+   "minSat": 72
+  },
+  {
+   "act": "interlude",
+   "from": 15,
+   "motionMax": 85,
+   "detail": 41.6,
+   "minLum": 72,
+   "minSat": 75
+  },
+  {
+   "act": "verse",
+   "from": 29.7,
+   "motionMax": 96,
+   "detail": 37.2,
+   "minLum": 97,
+   "minSat": 46
+  },
+  {
+   "act": "chorus",
+   "from": 59.22,
+   "motionMax": 10,
+   "detail": 32.6,
+   "minLum": 93,
+   "minSat": 92
+  },
+  {
+   "act": "verse",
+   "from": 74.04,
+   "motionMax": 79,
+   "detail": 36.5,
+   "minLum": 111,
+   "minSat": 50
+  },
+  {
+   "act": "chorus",
+   "from": 88.58,
+   "motionMax": 90,
+   "detail": 38.2,
+   "minLum": 95,
+   "minSat": 56
+  },
+  {
+   "act": "collapse",
+   "from": 110.9,
+   "motionMax": 87,
+   "detail": 42.8,
+   "minLum": 78,
+   "minSat": 42
+  },
+  {
+   "act": "dusk",
+   "from": 131.22,
+   "motionMax": 103,
+   "detail": 23.8,
+   "minLum": 58,
+   "minSat": 51
+  },
+  {
+   "act": "execution",
+   "from": 147.66,
+   "motionMax": 101,
+   "detail": 42.6,
+   "minLum": 88,
+   "minSat": 46
+  },
+  {
+   "act": "reveal",
+   "from": 177.24,
+   "motionMax": 95,
+   "detail": 35.5,
+   "minLum": 104,
+   "minSat": 63
+  },
+  {
+   "act": "outro",
+   "from": 193,
+   "motionMax": 73,
+   "detail": 22.2,
+   "minLum": 52,
+   "minSat": 108
+  }
+ ],
+ "inks": [
+  {
+   "t": 62,
+   "mean": 206.5,
+   "median": 215,
+   "thr": 133,
+   "inkPct": 0.91
+  },
+  {
+   "t": 67,
+   "mean": 201.6,
+   "median": 205,
+   "thr": 127,
+   "inkPct": 1.74
+  }
+ ],
+ "c205": [
+  {
+   "t": 203,
+   "r": 29,
+   "g": 21,
+   "b": 17
+  },
+  {
+   "t": 205.5,
+   "r": 70,
+   "g": 33,
+   "b": 33
+  },
+  {
+   "t": 206.2,
+   "r": 50,
+   "g": 23,
+   "b": 23
+  },
+  {
+   "t": 207.3,
+   "r": 20,
+   "g": 13,
+   "b": 12
+  }
+ ],
+ "shots": [
+  "chk-127.jpg",
+  "chk-140.jpg",
+  "chk-146.jpg",
+  "chk-206.jpg",
+  "chk-67.jpg"
+ ]
+}

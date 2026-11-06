@@ -74,6 +74,13 @@ function start(rate) {
     N, DUR, rate, n: 0, done: false, t0: performance.now(), flags: [],
     lum: new Uint8Array(N), sat: new Uint8Array(N), dif: new Uint8Array(N), det: new Uint8Array(N),
     pdx: new Uint8Array(N), pdy: new Uint8Array(N), cz: new Float32Array(N),
+    /* ink: how much of the lit sheet is actually darker than the sheet. Added because the film's
+       loudest act (chorus1, mean rms 0.661) passed every gate with motionMax 9 while its card
+       carried 0.31% ink - a 2-4 px hairline appearing on a bright ground moves the 120x68 readout
+       by almost nothing, so "is there anything written on the page" was not measured at all and had
+       to be found by hand. 255 means "no sheet this frame"; only every 10th frame is sampled, at
+       4 px stride, because a full-res read costs about as much as the render itself. */
+    ink: new Uint8Array(N).fill(255),
     sheetA: sheet(Math.min(14, Math.ceil(106 / COLS))), sheetB: sheet(14)
   };
   let camx = 0, camy = 0;
@@ -116,6 +123,32 @@ function start(rate) {
     }
     for (let y = 0; y < RH - 1; y++) {
       for (let x = 0; x < RW; x++) { grad += Math.abs(luma[(y + 1) * RW + x] - luma[y * RW + x]); gn++; }
+    }
+    if (f % 10 === 0) {
+      /* the sheet's own box on screen, projected the way the renderer projects it */
+      const SH = window.SHEET;
+      if (SH && SH.w && Math.abs(window.SHEET_T - t) < 1e-3 && c.z) {
+        const s = Math.min(stage.width / 1600, stage.height / 900) * 1.1 * c.z;
+        const x0 = Math.max(0, Math.round((SH.x + SH.w * 0.12 - c.x) * s + stage.width / 2));
+        const x1 = Math.min(stage.width, Math.round((SH.x + SH.w * 0.88 - c.x) * s + stage.width / 2));
+        const y0 = Math.max(0, Math.round((SH.y + SH.h * 0.08 - c.y) * s + stage.height / 2));
+        const y1 = Math.min(stage.height, Math.round((SH.y + SH.h * 0.92 - c.y) * s + stage.height / 2));
+        if (x1 - x0 > 60 && y1 - y0 > 60) {
+          const d = stage.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data;
+          const hist = new Uint32Array(256);
+          let n = 0;
+          for (let i = 0; i < d.length; i += 16) { hist[Math.max(d[i], d[i + 1], d[i + 2])]++; n++; }
+          let med = 255, acc = 0;
+          for (let l = 0; l < 256; l++) { acc += hist[l]; if (acc >= n / 2) { med = l; break; } }
+          /* relative, not absolute: with a fixed cut, an act whose paper merely got dimmer would
+             score as "more ink", which rewards the wrong thing - the same mistake det made when it
+             counted grain as structure */
+          const thr = Math.round(med * 0.62);
+          let dark = 0;
+          for (let l = 0; l <= thr; l++) dark += hist[l];
+          S.ink[f] = Math.min(255, Math.round(dark / n * 1000));      /* 0.1% of the sheet */
+        }
+      }
     }
     const npx = im.length / 4;
     S.lum[f] = Math.round(lum / npx);
@@ -205,14 +238,19 @@ function stats() {
   const perAct = ACTS.map((a) => {
     const f0 = Math.round(a.from * rate), f1 = Math.min(N, Math.round(a.to * rate));
     let dm = 0, dp = 0, dt = 0, dmax = 0, pmax = 0, n = 0, lmin = 255, smin = 255;
-    const ds = [];
+    const ds = [], inkv = [];
     for (let f = f0; f < f1; f++) {
       ds.push(S.dif[f]); dm += S.dif[f]; dp += S.pdx[f] + S.pdy[f]; dt += S.det[f];
       dmax = Math.max(dmax, S.dif[f]); pmax = Math.max(pmax, S.pdx[f] + S.pdy[f]);
       lmin = Math.min(lmin, S.lum[f]); smin = Math.min(smin, S.sat[f]); n++;
+      if (S.ink[f] !== 255) inkv.push(S.ink[f]);
     }
     ds.sort((x, y) => x - y);
+    inkv.sort((x, y) => x - y);
     return { act: a.tag, from: a.from, frames: n,
+             inkPct: inkv.length ? +(inkv[inkv.length >> 1] / 10).toFixed(2) : null,
+             inkPctMin: inkv.length ? +(inkv[0] / 10).toFixed(2) : null,
+             inkFrames: inkv.length,
              motion: +(dm / n).toFixed(1), motionP95: ds[Math.floor(n * 0.95)], motionMax: dmax,
              detail: +(dt / n).toFixed(1),
              pan: +(dp / n).toFixed(1), panMax: pmax, minLum: lmin, minSat: smin };
