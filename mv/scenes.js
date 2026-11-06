@@ -607,9 +607,20 @@ S.push({ id: 'boot', from: 0, to: 16,
 
 /* 2 — 16..29.7 s: the world the instance is handed, small and round and sealed */
 S.push({ id: 'globe', from: 16, to: 29.7,
-  frame: (k) => ({ z: 1.04 + k * 0.5, x: DW * 0.5, y: DH * 0.46 }),
+  /* The push-in used to end at z 1.54 with a 500-design-px ball inside a 1455x818 visible field:
+     the world grew to 96% of the frame height, which is the opposite of "small and sealed", and it
+     left no band anywhere in the picture where the sung title could sit whole. The radius and the
+     travel are now chosen so the ball stays the subject without becoming the whole screen, and the
+     target sits below it so the world hangs in the upper frame and the lower band stays free. */
+  frame: (k) => ({ z: 1.06 + k * 0.26, x: DW * 0.5, y: DH * 0.56, arc: 0 }),
+  /* the sphere is the body standing between this shot and the sung title, so it is published as the
+     occluder — the sheet is not the only thing a word can be put behind. It is a function of the
+     clock rather than something stamped while drawing, because the subtitle layer is composited
+     *before* the scene: a rect the scene hands over mid-draw arrives one frame late, and the word
+     spent the first frame of the hook at y 475 and the second at y 821 - a 346 px jump. */
+  occlude: () => ({ x: DW * 0.5 - GLOBE_R, y: DH * 0.46 - GLOBE_R, w: GLOBE_R * 2, h: GLOBE_R * 2 }),
   draw(g, k, F, t, col) {
-    const r = 250, L = { x: DW * 0.5 - r, y: DH * 0.46 - r, w: r * 2, h: r * 2 };
+    const r = GLOBE_R, L = { x: DW * 0.5 - r, y: DH * 0.46 - r, w: r * 2, h: r * 2 };
     room(g, col, F, t, L, { reach: 2.2 });
     g.save(); g.filter = 'blur(30px)'; g.fillStyle = rgba(col.page, 0.4);
     g.beginPath(); g.arc(DW * 0.5, DH * 0.46, r, 0, TAU); g.fill(); g.restore();
@@ -648,7 +659,7 @@ S.push({ id: 'globe', from: 16, to: 29.7,
       const nx = cx + hw * Math.sin(lon), ny = cy + r * Math.sin(la) + hw * 0.17 * cw;
       /* two nodes once landed symmetrically just above "execute" and spelled a fake umlaut. The
          title is the one thing on this body that has to stay readable, so nothing sits in its band */
-      if (Math.abs(ny - (cy - r * 0.52)) < 52 && Math.abs(nx - cx) < r * 0.72) continue;
+      if (Math.abs(ny - (cy - r * 0.52)) < r * 0.21 && Math.abs(nx - cx) < r * 0.72) continue;
       g.fillStyle = rgba(INK, 0.3 + cw * 0.45);
       g.beginPath(); g.arc(nx, ny, 2.2 + cw * 2.4, 0, TAU); g.fill();
     }
@@ -659,11 +670,11 @@ S.push({ id: 'globe', from: 16, to: 29.7,
     limb.addColorStop(1, rgba(col.room0, 0.5));
     g.fillStyle = limb; g.fillRect(L.x, L.y, L.w, L.h);
     dust(g, L, F, 90);
-    G.subject(g, DW * 0.5, DH * 0.46 + 150, 0.72, 'stand', 1, F[8] * 0.5);
+    G.subject(g, DW * 0.5, DH * 0.46 + r * 0.95, 0.72, 'stand', 1, F[8] * 0.5);
     g.restore();
     g.strokeStyle = rgba(col.page, 0.55); g.lineWidth = 2.6; G.circle(g, DW * 0.5, DH * 0.46, r);
-    g.strokeStyle = rgba(col.rim, 0.22); g.lineWidth = 1.4; G.circle(g, DW * 0.5, DH * 0.46, r + 22);
-    g.fillStyle = rgba(INK, 0.72); G.text(g, 'world.execute (me) ;', DW * 0.5, DH * 0.46 - r * 0.52, 30, 'center', 300);
+    g.strokeStyle = rgba(col.rim, 0.22); g.lineWidth = 1.4; G.circle(g, DW * 0.5, DH * 0.46, r + 18);
+    g.fillStyle = rgba(INK, 0.72); G.text(g, 'world.execute (me) ;', DW * 0.5, DH * 0.46 - r * 0.52, Math.round(r * 0.13), 'center', 300);
   } });
 
 /* 3 — 29.7..44.45 s: the four offers, drawn on the page the instance is handed */
@@ -857,6 +868,7 @@ function trapFrame(cageAt, from, yDrift) {
    chorus is the song's biggest entrance to that point and it had become the stillest shot in the
    picture. */
 const TRAP_TRAVEL = 0.40;
+const GLOBE_R = 150;        /* the world's radius in design px, and the rect the sung title is kept clear of */
 const CAGE_W = DW * 0.24;
 /* u 0 is the bars entirely above the room, u 1 is them standing in it. It used to be the other
    reading - the top edge travelled down until it met the bottom, so the cage collapsed into a 20 px

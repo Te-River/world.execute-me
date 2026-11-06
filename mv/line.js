@@ -193,7 +193,7 @@ function hooks(LYRICS) {
   });
   return HOOKS;
 }
-function display(g, t, W, H, pal, LYRICS, camZ, avoid) {
+function display(g, t, W, H, pal, LYRICS, camZ, oc) {
   /* The counting chant (158.90-161.58) already paints each number as the whole scene - EIN, DOS,
      TROIS, NE, FEM, LIU full-bleed on a red field. The karaoke line was drawing the same word a
      second time, and the bottom-centre anchor dropped that copy straight onto the row of
@@ -203,6 +203,7 @@ function display(g, t, W, H, pal, LYRICS, camZ, avoid) {
   const chant = t >= 158.90 && t < 161.58;
   const hs = hooks(LYRICS);
   const h = hs.find((x) => t >= x.from && t < x.to);
+  window.WORD = null;
   if (!h) return;
   const u = clamp((t - h.from) / (h.to - h.from), 0, 1);
   /* the tighter the shot, the smaller the word: at z=1.5 the sheet covers most of the frame and
@@ -215,7 +216,7 @@ function display(g, t, W, H, pal, LYRICS, camZ, avoid) {
   const ANCH = [[0.045, 0.16, 'left'], [0.5, 0.9, 'center'], [0.045, 0.76, 'left'],
                 [0.5, 0.15, 'center'], [0.045, 0.44, 'left'], [0.5, 0.9, 'center']];
   const a = chant ? [0.5, 0.15, 'center'] : ANCH[hs.indexOf(h) % ANCH.length];
-  const x = W * a[0], y = H * a[1];
+  const x = W * a[0]; let y = H * a[1];
   if (!chant) {
     g.save();
     g.font = `300 ${size}px Georgia,"Times New Roman",serif`;
@@ -225,20 +226,39 @@ function display(g, t, W, H, pal, LYRICS, camZ, avoid) {
     /* the wipe has to start *before* the word: this rect used to carry a +12/+4 lead-in, so the
        first frame of a hook already showed ~16 px of the letter and the 120 fps sweep read that
        pop as an unexplained flash */
-    /* A word the page covers from one end reads as a word continuing behind the light, which is the
-       effect this layer exists for. A word the page covers in the MIDDLE reads as a typo: at
+    /* A word the room covers from one end reads as a word continuing behind the light, which is the
+       effect this layer exists for. A word the room covers in the MIDDLE reads as a typo: at
      131.22 s ILLEGAL ARGUMENTS is 17 glyphs wide, the sheet ends around screen x 1246 and the word
-     runs to ~1708, so the frame showed "ILLEGAL A" + paper + "MENTS" - and the same thing happens to
-     the title line at 16 s, where the globe sits inside world.execute(me);. So where the sheet lies
-     strictly inside the word, the wipe is cut at the sheet's near edge and the hidden part stays
-     hidden instead of reappearing on the far side. Only the left-anchored words need this; the
-     centred ones sit above or below the sheet's band and never collide with it. */
+     runs to ~2157, so the frame showed "ILLEGAL A" + paper + "MENTS"; and at 21 s the globe sat
+     inside world.execute(me); the same way. Two bodies answer it differently. The sheet is the
+     film's lamp, and a word losing itself in glare is the effect this layer exists for, so there
+     the wipe simply stops at the near edge. A solid body is not a lamp: a word chopped by a sphere
+     is a typo, so the word moves to a band of the frame the body does not reach - a whole word
+     somewhere else beats a chopped one in the right place - and only if no band is clear does it
+     fall back to stopping at the near edge. Only the left-anchored words need any of this; the
+     centred ones sit above or below the body's band. */
     let clip = (tw + 16) * u;
-    if (avoid && a[2] === 'left') {
-      const x0 = Math.min(avoid[0], avoid[1]);
-      if (x0 > left + 24 && x0 < left + tw) clip = Math.min(clip, x0 - left - 8);
+    if (oc && a[2] === 'left' && oc.x0 < left + tw - 8 && oc.x1 > left + 8) {
+      const top = size * 0.42, bot = size * 0.72;      /* glyph band + the Chinese line under it */
+      const covered = (c) => c + bot > oc.y0 && c - top < oc.y1;
+      if (covered(y)) {
+        const clear = oc.body ? [0.76, 0.16, 0.44].map((f) => f * H)
+                        .find((c) => c - top >= 0 && c + bot <= H && !covered(c)) : undefined;
+        if (clear !== undefined) y = clear;
+        else {
+          const x0 = Math.min(oc.x0, oc.x1);
+          if (x0 > left + 24 && x0 < left + tw) clip = Math.min(clip, x0 - left - 8);
+        }
+      }
     }
     g.beginPath(); g.rect(0, 0, left - 8 + clip, H); g.clip();
+    /* where the word actually ended up, not where this function meant to put it — the same
+       reason EDIT reports the reframe that happened: a guard you cannot read is a guard you
+       cannot tell the difference between "did nothing" and "did not fire" */
+    window.WORD = { w: h.w, y: Math.round(y), want: Math.round(H * a[1]),
+                    left: Math.round(left), tw: Math.round(tw),
+                    clip: Math.round(clip), size: Math.round(size),
+                    body: !!(oc && oc.body), oc: oc ? [oc.x0, oc.x1, oc.y0, oc.y1].map(Math.round) : null };
     g.globalAlpha = 0.55; g.fillStyle = rgba(pal.accent, 0.6); g.fillText(h.w, x - 5, y + 3);
     g.fillStyle = rgba(pal.glow, 0.55); g.fillText(h.w, x + 5, y - 3);
     g.globalAlpha = 1; g.fillStyle = rgba(pal.rim, 0.95); g.fillText(h.w, x, y);

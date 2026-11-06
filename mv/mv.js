@@ -402,6 +402,24 @@ function sheetNow(t) {
   if (window.SHEET_T === undefined || Math.abs(t - window.SHEET_T) > SHEET_STALE) return null;
   return S;
 }
+/* Where the shot's own body sits on screen this frame, in screen px, so the sung word can be put
+   around it instead of through it. A shot that has a body says so with occlude(t) (globe: the
+   sphere, which draws no page and so has no SHEET to read); failing that the sheet is the body, and
+   page() draws it at 0.76x/0.84y about its centre, which is the same 0.12/0.88 the bound reads.
+   Roll and shake are left out: the guard only needs to know roughly where the body is, and the word
+   is then cut a few px early rather than clipped twice. */
+function occluderSpan(t, cam, sc) {
+  const O = sc && sc.occlude ? sc.occlude(t) : null;
+  const S = sheetNow(t);
+  const r = O || (S && { x: S.x + S.w * 0.12, y: S.y + S.h * 0.08, w: S.w * 0.76, h: S.h * 0.84 });
+  if (!r) return null;
+  const k = fitScale() * cam.z;
+  /* body marks an occluder that is an object rather than the light: the sheet is the film's lamp and
+     a word ending at its edge reads as a word losing itself in glare, which is the effect that layer
+     is for. A solid body is not a lamp, so a word is placed around it instead of behind it. */
+  return { body: !!O, x0: (r.x - cam.x) * k + W / 2, x1: (r.x + r.w - cam.x) * k + W / 2,
+           y0: (r.y - cam.y) * k + HH / 2, y1: (r.y + r.h - cam.y) * k + HH / 2 };
+}
 function boundToSheet(cam, t, hard, sc) {
   const S = sheetNow(t);
   if (!S || !cam.z) { boundScene = null; return cam; }
@@ -716,14 +734,10 @@ function render(ts) {
      behind it — the word reads as emerging out of the light, not as an overlay on top of it. */
   bx.setTransform(1, 0, 0, 1, 0, 0);
   if (window.MUSIC) {
-    /* Where the sheet will sit on screen this frame, in screen px, so the display line can avoid
-     * being punched through by it. page() draws the sheet at 0.76 of L about its centre, which is the
-     * same 0.12/0.88 the bound reads; roll and shake are left out because the guard only needs to
-     * know roughly where the light is, and the word is cut a few px early rather than clipped twice. */
-    const sh = sheetNow(t), sc0 = fitScale() * cam.z;
-    const avoid = sh ? [(sh.x + sh.w * 0.12 - cam.x) * sc0 + W / 2,
-                       (sh.x + sh.w * 0.88 - cam.x) * sc0 + W / 2] : null;
-    MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z, avoid);
+    /* Where the shot's body will sit on screen this frame, so the sung word can be placed around it
+     * rather than punched through by it. See occluderSpan. */
+    const oc = occluderSpan(t, cam, SCENES[idx]);
+    MVL.melody(bx, t, W, HH, pal, cam.z); MVL.display(bx, t, W, HH, pal, LYRICS, cam.z, oc);
     MVL.chrome(bx, t, W, HH, pal, raw);
   }
   const nxt = SCENES[idx + 1];
